@@ -7,7 +7,7 @@ func GetTinLookup(countryCode string) TinLookup {
 		return VIESLookup{}
 	// Add cases for other countries and their specific validators
 	default:
-		return nil // or a default validator if applicable
+		return nil // nil in case we don't have a validator for the country code
 	}
 }
 
