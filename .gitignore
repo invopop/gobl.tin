@@ -28,3 +28,6 @@ go.work.sum
 /gobl.tin
 main.go
 
+#In the environment variables I store the VAT numbers for testing
+.env
+
