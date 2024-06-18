@@ -1,4 +1,4 @@
-package main
+package gobltin
 
 import (
 	"errors"
@@ -37,8 +37,7 @@ func TestNewTinNumber(t *testing.T) {
 
 // getExpectedResult returns the expected result for a given test file
 func getExpectedResult(filePath string) (*TinNumber, error, bool) {
-	// Here you can define the expected result based on the file name
-	// For example:
+	// Here we define the expected result for the files in test/data
 	fileName := filepath.Base(filePath)
 	switch fileName {
 	case "invoice-valid.json":

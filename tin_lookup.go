@@ -1,4 +1,4 @@
-package main
+package gobltin
 
 // Interface for all lookup functions
 type CheckTinResponse struct {

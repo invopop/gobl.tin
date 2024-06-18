@@ -1,4 +1,4 @@
-package main
+package gobltin
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// The valid VAT number for Spain is stored in the .env file
 func init() {
-	// Load .env file
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file")

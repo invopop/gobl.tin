@@ -1,4 +1,4 @@
-package main
+package gobltin
 
 import (
 	"reflect"
@@ -9,7 +9,7 @@ func TestGetTinLookup(t *testing.T) {
 	tests := []struct {
 		name         string
 		countryCode  string
-		expectedType reflect.Type // The type we expect the return value to be
+		expectedType reflect.Type
 	}{
 		{
 			name:         "European Country Code",
@@ -21,7 +21,7 @@ func TestGetTinLookup(t *testing.T) {
 			countryCode:  "US",
 			expectedType: nil,
 		},
-		// Add more test cases as needed
+		// Add more test cases when new validators are implemented
 	}
 
 	for _, tt := range tests {
