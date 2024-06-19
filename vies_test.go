@@ -1,7 +1,6 @@
 package gobltin
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -57,9 +56,7 @@ func TestViesLookup(t *testing.T) {
 			validator := VIESLookup{}
 			resp, err := validator.LookupTin(tt.countryCode, tt.tinNumber)
 
-			fmt.Println(resp)
 			if tt.expectError {
-				fmt.Println(resp)
 				if err == nil {
 					t.Errorf("Expected error but got none")
 				}

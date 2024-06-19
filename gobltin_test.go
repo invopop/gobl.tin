@@ -29,7 +29,7 @@ func TestNewTinNumber(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, expectedTin, tin)
 			response, _ := tin.Lookup()
-			assert.Equal(t, response.Valid, expectedValid)
+			assert.Equal(t, expectedValid, response.Valid)
 		}
 	}
 
