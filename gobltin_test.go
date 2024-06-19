@@ -1,11 +1,13 @@
 package gobltin
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"testing"
 
 	"github.com/invopop/gobl.tin/test"
+	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +22,7 @@ func TestNewTinNumber(t *testing.T) {
 
 		tin, err := NewTinNumber(env)
 
-		expectedTin, expectedErr, expectedValid := getExpectedResult(example)
+		expectedTin, expectedValid, expectedErr := getExpectedResult(example)
 
 		if expectedErr != nil {
 			assert.Error(t, err)
@@ -28,7 +30,8 @@ func TestNewTinNumber(t *testing.T) {
 		} else {
 			assert.NoError(t, err)
 			assert.Equal(t, expectedTin, tin)
-			response, _ := tin.Lookup()
+			ctx := context.Background()
+			response, _ := Lookup(ctx, tin)
 			assert.Equal(t, expectedValid, response.Valid)
 		}
 	}
@@ -36,23 +39,23 @@ func TestNewTinNumber(t *testing.T) {
 }
 
 // getExpectedResult returns the expected result for a given test file
-func getExpectedResult(filePath string) (*TinNumber, error, bool) {
+func getExpectedResult(filePath string) (*tax.Identity, bool, error) {
 	// Here we define the expected result for the files in test/data
 	fileName := filepath.Base(filePath)
 	switch fileName {
 	case "invoice-valid.json":
-		return &TinNumber{CountryCode: "DE", TinNumber: "282741168"}, nil, true
+		return &tax.Identity{Country: "DE", Code: "282741168"}, true, nil
 	case "empty.json":
-		return nil, errors.New("invalid document type"), false
+		return nil, false, errors.New("invalid document type")
 	case "invoice-no-customer.json":
-		return nil, errors.New("no customer found"), false
+		return nil, false, errors.New("no customer found")
 	case "invoice-no-taxid.json":
-		return nil, errors.New("no tax ID found"), false
+		return nil, false, errors.New("no tax ID found")
 	case "invoice-no-country.json":
-		return nil, errors.New("no country code found"), false
+		return nil, false, errors.New("no country code found")
 	case "invoice-no-code.json":
-		return nil, errors.New("no tax ID code found"), false
+		return nil, false, errors.New("no tax ID code found")
 	default:
-		return nil, nil, false
+		return nil, false, nil
 	}
 }

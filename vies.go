@@ -2,12 +2,16 @@ package gobltin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/invopop/gobl/tax"
 )
 
+// VIES API URL is the URL for checking VAT numbers in the VIES search engine
 const VIES_API_URL = "https://ec.europa.eu/taxation_customs/vies/rest-api//check-vat-number"
 
 type VIESLookup struct{}
@@ -21,11 +25,11 @@ type CommonResponse struct {
 	Message string `json:"message"`
 }
 
-// Validating existence of VAT number in VIES database
-func (v VIESLookup) LookupTin(countryCode, vatNumber string) (*CheckTinResponse, error) {
+// LookupTin validates existence of VAT number in VIES database
+func (v VIESLookup) LookupTin(c context.Context, tid *tax.Identity) (*CheckTinResponse, error) {
 	reqBody := CheckVatRequest{
-		CountryCode: countryCode,
-		VatNumber:   vatNumber,
+		CountryCode: tid.Country.String(), //probar con los valores originales y ver si va el request (sin string)
+		VatNumber:   tid.Code.String(),
 	}
 
 	jsonData, err := json.Marshal(reqBody)

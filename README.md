@@ -1,4 +1,5 @@
 # gobl.tin
+
 Lookup and validate Tax ID Numbers (TIN) included in GOBL documents.
 
 Copyright [Invopop Ltd.](https://invopop.com) 2024. Released publicly under the [Apache License Version 2.0](LICENSE). For commercial licenses please contact the [dev team at invopop](mailto:dev@invopop.com). In order to accept contributions to this library we will require transferring copyrights to Invopop Ltd.
@@ -53,6 +54,20 @@ func main() {
 	fmt.Printf("Request Date: %s\n", response.RequestDate)
 	fmt.Printf("Valid: %t\n", response.Valid)
 }
+```
+
+### Command Line
+
+The GOBL TIN Lookup tool also includes a command line helper. You can install manually in your Go environment with:
+
+```bash
+go install ./cmd/gobl.tin
+```
+
+Usage is very straightforward:
+
+```bash
+gobl.xinvoice lookup ./test/data/invoice-valid.json
 ```
 
 ## Testing

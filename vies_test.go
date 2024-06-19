@@ -1,10 +1,11 @@
 package gobltin
 
 import (
+	"context"
 	"log"
-	"os"
 	"testing"
 
+	"github.com/invopop/gobl/tax"
 	"github.com/joho/godotenv"
 )
 
@@ -19,42 +20,38 @@ func init() {
 func TestViesLookup(t *testing.T) {
 	tests := []struct {
 		name          string
-		countryCode   string
-		tinNumber     string
+		tin           *tax.Identity
 		expectError   bool
 		expectedValid bool
 	}{
 		{
 			name:          "Valid VAT number",
-			countryCode:   "ES",
-			tinNumber:     os.Getenv("VAT_TEST_NUMBER_ES"),
+			tin:           &tax.Identity{Country: "ES", Code: "B85905495"},
 			expectError:   false,
 			expectedValid: true,
 		},
 		{
 			name:          "Invalid VAT number",
-			countryCode:   "CZ",
-			tinNumber:     "INVALID",
+			tin:           &tax.Identity{Country: "CZ", Code: "INVALID"},
 			expectError:   false,
 			expectedValid: false,
 		},
 		{
 			name:        "Empty VAT number",
-			countryCode: "IT",
-			tinNumber:   "",
+			tin:         &tax.Identity{Country: "IT", Code: ""},
 			expectError: true,
 		},
 		{
 			name:        "Symbols in VAT number",
-			countryCode: "DE",
-			tinNumber:   "H45%ˆ#",
+			tin:         &tax.Identity{Country: "DE", Code: "H45%ˆ#"},
 			expectError: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validator := VIESLookup{}
-			resp, err := validator.LookupTin(tt.countryCode, tt.tinNumber)
+			ctx := context.Background()
+			resp, err := validator.LookupTin(ctx, tt.tin)
 
 			if tt.expectError {
 				if err == nil {

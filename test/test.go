@@ -1,3 +1,4 @@
+// Package test provides tools for testing the library
 package test
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/invopop/gobl"
 )
 
+// LoadTestEnvelope returns a GOBL Envelope from a file in the `test/data` folder
 func LoadTestEnvelope(name string) (*gobl.Envelope, error) {
 	data, _ := os.ReadFile(name)
 

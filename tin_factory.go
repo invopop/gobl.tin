@@ -1,6 +1,6 @@
 package gobltin
 
-// Factory for getting all validation functions
+// GetTinLookup returns the TinLookup for a given country code
 func GetTinLookup(countryCode string) TinLookup {
 	switch {
 	case isEuropeanCountryCode(countryCode): // For the moment it only supports VIES lookup
@@ -12,6 +12,7 @@ func GetTinLookup(countryCode string) TinLookup {
 }
 
 // List of all EU country codes supported by VIES
+// Change this for all the countries in l10 lib
 var europeanCountryCodes = []string{
 	"AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI",
 	"FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL",
