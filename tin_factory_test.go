@@ -3,12 +3,14 @@ package gobltin
 import (
 	"reflect"
 	"testing"
+
+	"github.com/invopop/gobl/l10n"
 )
 
 func TestGetTinLookup(t *testing.T) {
 	tests := []struct {
 		name         string
-		countryCode  string
+		countryCode  l10n.CountryCode
 		expectedType reflect.Type
 	}{
 		{

@@ -1,26 +1,29 @@
 package gobltin
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 
+	"github.com/go-resty/resty/v2"
+	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/tax"
 )
 
-// VIES API URL is the URL for checking VAT numbers in the VIES search engine
-const VIES_API_URL = "https://ec.europa.eu/taxation_customs/vies/rest-api//check-vat-number"
+const viesAPIURL = "https://ec.europa.eu/taxation_customs/vies/rest-api//check-vat-number"
 
+// VIESLookup is a struct that implements the VIES lookup and inherits from TinLookup
 type VIESLookup struct{}
 
+// CheckVatRequest is the request body for the VIES API
 type CheckVatRequest struct {
-	CountryCode string `json:"countryCode"`
-	VatNumber   string `json:"vatNumber"`
+	CountryCode l10n.CountryCode `json:"countryCode"`
+	VatNumber   cbc.Code         `json:"vatNumber"`
 }
 
+// CommonResponse is the response body for the VIES API
 type CommonResponse struct {
 	Message string `json:"message"`
 }
@@ -28,36 +31,39 @@ type CommonResponse struct {
 // LookupTin validates existence of VAT number in VIES database
 func (v VIESLookup) LookupTin(c context.Context, tid *tax.Identity) (*CheckTinResponse, error) {
 	reqBody := CheckVatRequest{
-		CountryCode: tid.Country.String(), //probar con los valores originales y ver si va el request (sin string)
-		VatNumber:   tid.Code.String(),
+		CountryCode: tid.Country,
+		VatNumber:   tid.Code,
 	}
 
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, errors.New("error marshalling JSON")
-	}
+	client := resty.New()
+	resp, err := client.R().
+		SetContext(c).
+		SetHeader("Content-Type", "application/json").
+		SetBody(reqBody).
+		Post(viesAPIURL)
 
-	resp, err := http.Post(VIES_API_URL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, errors.New("error sending request")
 	}
-	defer resp.Body.Close()
 
-	var vatResponse CheckTinResponse
-	if resp.StatusCode == http.StatusOK {
-		err = json.NewDecoder(resp.Body).Decode(&vatResponse)
+	if resp.IsSuccess() {
+		var vatResponse CheckTinResponse
+		err := json.Unmarshal(resp.Body(), &vatResponse)
 		if err != nil {
 			return nil, errors.New("error decoding JSON")
 		}
 		return &vatResponse, nil
-	} else if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusInternalServerError {
-		var commonResp CommonResponse
-		err = json.NewDecoder(resp.Body).Decode(&commonResp)
-		if err != nil {
-			return nil, fmt.Errorf("received %d status code with unknown body", resp.StatusCode)
-		}
-		return nil, fmt.Errorf("received %d status code: %s", resp.StatusCode, commonResp.Message)
-	} else {
-		return nil, fmt.Errorf("received unexpected %d status code", resp.StatusCode)
 	}
+
+	var commonResp CommonResponse
+	err = json.Unmarshal(resp.Body(), &commonResp)
+	if err != nil {
+		return nil, fmt.Errorf("received %d status code with unknown body", resp.StatusCode())
+	}
+
+	if resp.StatusCode() == 400 || resp.StatusCode() == 500 {
+		return nil, fmt.Errorf("received %d status code: %s", resp.StatusCode(), commonResp.Message)
+	}
+
+	return nil, fmt.Errorf("received unexpected %d status code", resp.StatusCode())
 }

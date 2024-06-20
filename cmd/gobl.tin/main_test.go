@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/flimzy/testy"
 
@@ -13,48 +16,59 @@ import (
 
 func Test_root(t *testing.T) {
 	tests := []struct {
-		name  string
-		args  []string
-		stdin io.Reader
-		err   string
+		name     string
+		args     []string
+		err      error
+		expected string
+		stdin    io.Reader
 	}{
 		{
-			name: "unsupported command",
-			args: []string{"foo"},
-			err:  `unknown command "foo" for "gobl.tin"`,
+			name:     "default customer lookup",
+			args:     []string{"lookup", "./test/data/invoice-valid.json"},
+			expected: "customer: valid\n",
+		},
+		{
+			name:     "supplier lookup",
+			args:     []string{"lookup", "./test/data/invoice-valid.json", "--type", "supplier"},
+			expected: "supplier: Tax ID Invalid, tax ID not found in database\n",
+		},
+		{
+			name:     "both lookup",
+			args:     []string{"lookup", "./test/data/invoice-valid.json", "--type", "both"},
+			expected: "customer: valid\nsupplier: Tax ID Invalid, tax ID not found in database\n",
 		},
 		{
 			name: "lookup no args",
 			args: []string{"lookup"},
-			err:  "expected exactly one input file, the command usage is `gobl.tin lookup <input>`",
+			err:  fmt.Errorf("expected exactly one input file, the command usage is `gobl.tin lookup <input>`"),
 		},
 		{
 			name: "lookup too many args",
 			args: []string{"lookup", "foo", "bar"},
-			err:  "expected exactly one input file, the command usage is `gobl.tin lookup <input>`",
+			err:  fmt.Errorf("expected exactly one input file, the command usage is `gobl.tin lookup <input>`"),
 		},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			cmd := root().cmd()
+			cmd := &cobra.Command{}
+			rootOpts := &rootOpts{}
+			lookupCmd := lookup(rootOpts).cmd()
+
+			cmd.AddCommand(lookupCmd)
+			output := &bytes.Buffer{}
+			cmd.SetOut(output)
+			cmd.SetErr(output)
 			cmd.SetArgs(tt.args)
-			var err error
-			stdout, stderr := testy.RedirIO(tt.stdin, func() {
-				err = cmd.Execute()
-			})
-			if d := testy.DiffText(testy.Snapshot(t, "_stdout"), stdout); d != nil {
-				t.Errorf("STDOUT: %s", d)
-			}
-			if d := testy.DiffText(testy.Snapshot(t, "_stderr"), stderr); d != nil {
-				t.Errorf("STDERR: %s", d)
-			}
-			if tt.err == "" {
-				assert.Nil(t, err)
+
+			err := cmd.Execute()
+			if tt.err != nil {
+				assert.Error(t, err)
+				assert.EqualError(t, err, tt.err.Error())
 			} else {
-				assert.EqualError(t, err, tt.err)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, output.String())
 			}
 		})
 	}

@@ -11,13 +11,10 @@ Copyright [Invopop Ltd.](https://invopop.com) 2024. Released publicly under the 
 Usage of the GOBL TIN lookup library is pretty straight forward. You must first have a GOBL Envelope including an invoice ready to convert. There are some samples here in the test/data directory.
 
 ```go
-package main
-
-package main
+package gobltin
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"github.com/invopop/gobl"
@@ -33,26 +30,16 @@ func main() {
 		panic(err)
 	}
 
-	tin, err := gobltin.NewTinNumber(env)
-	if err != nil {
-		panic(err)
-	}
+	//If you don't provide any arguments, the function will return the response for the customer
+	results, err := gobltin.LookupTin(env)
 
-	response, err := tin.Lookup()
-	if err != nil {
-		panic(err)
-	}
+	results, err = gobltin.LookupTin(env, gobltin.Customer)
+	results, err = gobltin.LookupTin(env, gobltin.Supplier)
+	results, err = gobltin.LookupTin(env, gobltin.Both)
 
-	//With the output you can check the following fields:
-	//response.CountryCode: "DE"
-	//response.TinNumber: "123456789"
-	//response.RequestDate: "2021-09-29T15:00:00Z"
-	//response.Valid: true or false
-
-	fmt.Printf("Country Code: %s\n", response.CountryCode)
-	fmt.Printf("VAT Number: %s\n", response.TinNumber)
-	fmt.Printf("Request Date: %s\n", response.RequestDate)
-	fmt.Printf("Valid: %t\n", response.Valid)
+	// The results contain a list of PartyTinResponse structs,
+	// each with the following fields: Party, Valid, and Message
+	// It would have at most two elements, one for the customer and one for the supplier
 }
 ```
 
@@ -64,10 +51,24 @@ The GOBL TIN Lookup tool also includes a command line helper. You can install ma
 go install ./cmd/gobl.tin
 ```
 
-Usage is very straightforward:
+You can write the simple command, that will output a message regarding the TIN of the customer:
 
 ```bash
-gobl.xinvoice lookup ./test/data/invoice-valid.json
+gobl.tin lookup ./test/data/invoice-valid.json
+```
+
+But you can also define the party you want to validate the TIN as an argument:
+
+```bash
+gobl.tin lookup --type customer ./test/data/invoice-valid.json
+```
+
+```bash
+gobl.tin lookup --type supplier ./test/data/invoice-valid.json
+```
+
+```bash
+gobl.tin lookup --type both ./test/data/invoice-valid.json
 ```
 
 ## Testing

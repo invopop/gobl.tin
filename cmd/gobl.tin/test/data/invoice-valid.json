@@ -52,6 +52,7 @@
 		"customer": {
 			"name": "Sample Consumer",
 			"tax_id": {
+				"country": "DE",
 				"code": "282741168"
 			},
 			"addresses": [

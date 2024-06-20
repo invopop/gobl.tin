@@ -12,6 +12,7 @@ import (
 
 type lookupOpts struct {
 	*rootOpts
+	lookupType string
 }
 
 func lookup(o *rootOpts) *lookupOpts {
@@ -21,9 +22,11 @@ func lookup(o *rootOpts) *lookupOpts {
 func (c *lookupOpts) cmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "lookup <input>",
-		Short: "Check validity for the customer TIN number in an invoice",
+		Short: "Check validity for the customer and/or the supplier TIN number in an invoice",
 		RunE:  c.runE,
 	}
+
+	cmd.Flags().StringVarP(&c.lookupType, "type", "t", "customer", "Type of lookup: customer, supplier, or both")
 
 	return cmd
 }
@@ -38,7 +41,11 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer input.Close()
+	defer func() {
+		if cerr := input.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	inData, err := io.ReadAll(input)
 	if err != nil {
@@ -50,20 +57,29 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parsing input as GOBL Envelope: %w", err)
 	}
 
-	tin, err := gobltin.NewTinNumber(env)
-	if err != nil {
-		return fmt.Errorf("creating TIN number: %w", err)
+	var responses []*gobltin.PartyTinResponse
+
+	switch c.lookupType {
+	case "customer":
+		responses, err = gobltin.LookupTin(env, gobltin.Customer)
+	case "supplier":
+		responses, err = gobltin.LookupTin(env, gobltin.Supplier)
+	case "both":
+		responses, err = gobltin.LookupTin(env, gobltin.Both)
+	default:
+		return fmt.Errorf("invalid lookup type: %s, expected customer, supplier, or both", c.lookupType)
 	}
 
-	response, err := gobltin.Lookup(cmd.Context(), tin)
 	if err != nil {
 		return fmt.Errorf("looking up TIN number: %w", err)
 	}
 
-	if response.Valid {
-		fmt.Println("TIN number is valid")
-	} else {
-		fmt.Println("TIN number is invalid")
+	for _, response := range responses {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\n", response.Message); err != nil {
+			return fmt.Errorf("writing output: %w", err)
+		}
+
 	}
+
 	return nil
 }

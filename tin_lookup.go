@@ -11,7 +11,6 @@ type CheckTinResponse struct {
 	Valid       bool   `json:"valid"`
 	CountryCode string `json:"countryCode"` // Cambiar estos campos por alguno relacionado con GOBL
 	TinNumber   string `json:"vatNumber"`
-	RequestDate string `json:"requestDate"`
 }
 
 // TinLookup is the interface for looking up TIN numbers

@@ -2,20 +2,10 @@ package gobltin
 
 import (
 	"context"
-	"log"
 	"testing"
 
 	"github.com/invopop/gobl/tax"
-	"github.com/joho/godotenv"
 )
-
-// The valid VAT number for Spain is stored in the .env file
-func init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-}
 
 func TestViesLookup(t *testing.T) {
 	tests := []struct {
@@ -26,7 +16,7 @@ func TestViesLookup(t *testing.T) {
 	}{
 		{
 			name:          "Valid VAT number",
-			tin:           &tax.Identity{Country: "ES", Code: "B85905495"},
+			tin:           &tax.Identity{Country: "DE", Code: "282741168"},
 			expectError:   false,
 			expectedValid: true,
 		},

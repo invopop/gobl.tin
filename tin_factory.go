@@ -1,7 +1,9 @@
 package gobltin
 
+import "github.com/invopop/gobl/l10n"
+
 // GetTinLookup returns the TinLookup for a given country code
-func GetTinLookup(countryCode string) TinLookup {
+func GetTinLookup(countryCode l10n.CountryCode) TinLookup {
 	switch {
 	case isEuropeanCountryCode(countryCode): // For the moment it only supports VIES lookup
 		return VIESLookup{}
@@ -12,14 +14,13 @@ func GetTinLookup(countryCode string) TinLookup {
 }
 
 // List of all EU country codes supported by VIES
-// Change this for all the countries in l10 lib
-var europeanCountryCodes = []string{
+var europeanCountryCodes = []l10n.CountryCode{
 	"AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI",
 	"FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL",
 	"PT", "RO", "SE", "SI", "SK", "XI",
 }
 
-func isEuropeanCountryCode(code string) bool {
+func isEuropeanCountryCode(code l10n.CountryCode) bool {
 	for _, c := range europeanCountryCodes {
 		if c == code {
 			return true
