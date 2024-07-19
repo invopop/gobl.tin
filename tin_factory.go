@@ -14,6 +14,7 @@ func GetTinLookup(countryCode l10n.CountryCode) TinLookup {
 }
 
 // List of all EU country codes supported by VIES
+// XI is used for Northern Ireland when needs to be distinguished from UK
 var europeanCountryCodes = []l10n.CountryCode{
 	"AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI",
 	"FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL",

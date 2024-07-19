@@ -30,16 +30,13 @@ func main() {
 		panic(err)
 	}
 
-	//If you don't provide any arguments, the function will return the response for the customer
-	results, err := gobltin.LookupTin(env)
+	inv, ok := env.Extract().(*bill.Invoice)
+	if !ok {
+		return nil, fmt.Errorf("invalid type %T", env.Document)
+	}
 
-	results, err = gobltin.LookupTin(env, gobltin.Customer)
-	results, err = gobltin.LookupTin(env, gobltin.Supplier)
-	results, err = gobltin.LookupTin(env, gobltin.Both)
-
-	// The results contain a list of PartyTinResponse structs,
-	// each with the following fields: Party, Valid, and Message
-	// It would have at most two elements, one for the customer and one for the supplier
+	valid, err = gobltin.LookupTin(inv.Customer)
+	valid, err = gobltin.LookupTin(inv.Supplier)
 }
 ```
 

@@ -3,7 +3,6 @@ package gobltin
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/go-resty/resty/v2"
@@ -43,14 +42,14 @@ func (v VIESLookup) LookupTin(c context.Context, tid *tax.Identity) (*CheckTinRe
 		Post(viesAPIURL)
 
 	if err != nil {
-		return nil, errors.New("error sending request")
+		return nil, ErrNetwork.WithMessage(err.Error())
 	}
 
 	if resp.IsSuccess() {
 		var vatResponse CheckTinResponse
 		err := json.Unmarshal(resp.Body(), &vatResponse)
 		if err != nil {
-			return nil, errors.New("error decoding JSON")
+			return nil, ErrNetwork.WithMessage(err.Error())
 		}
 		return &vatResponse, nil
 	}
@@ -58,12 +57,12 @@ func (v VIESLookup) LookupTin(c context.Context, tid *tax.Identity) (*CheckTinRe
 	var commonResp CommonResponse
 	err = json.Unmarshal(resp.Body(), &commonResp)
 	if err != nil {
-		return nil, fmt.Errorf("received %d status code with unknown body", resp.StatusCode())
+		return nil, ErrNetwork.WithMessage(fmt.Sprintf("received %d status code with unknown body", resp.StatusCode()))
 	}
 
 	if resp.StatusCode() == 400 || resp.StatusCode() == 500 {
-		return nil, fmt.Errorf("received %d status code: %s", resp.StatusCode(), commonResp.Message)
+		return nil, ErrNetwork.WithMessage(fmt.Sprintf("received %d status code: %s", resp.StatusCode(), commonResp.Message))
 	}
 
-	return nil, fmt.Errorf("received unexpected %d status code", resp.StatusCode())
+	return nil, ErrNetwork.WithMessage(fmt.Sprintf("received unexpected %d status code", resp.StatusCode()))
 }

@@ -25,19 +25,13 @@ func TestValidateTin(t *testing.T) {
 			name:             "Invalid VAT number",
 			tid:              &tax.Identity{Country: "CZ", Code: "INVALID"},
 			expectedResponse: &CheckTinResponse{Valid: false, CountryCode: "CZ", TinNumber: "INVALID"},
-			expectedError:    &InvalidTaxIDError{Msg: "tax ID not found in database"},
-		},
-		{
-			name:             "Empty VAT number",
-			tid:              nil,
-			expectedResponse: nil,
-			expectedError:    &InvalidTaxIDError{Msg: "no tax ID provided"},
+			expectedError:    nil,
 		},
 		{
 			name:             "Non supported country code",
 			tid:              &tax.Identity{Country: "US", Code: "12345678"},
 			expectedResponse: nil,
-			expectedError:    &InvalidTaxIDError{Msg: "no validator found for country code"},
+			expectedError:    ErrNotSupported.WithMessage("country code not supported"),
 		},
 	}
 

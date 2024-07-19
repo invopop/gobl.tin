@@ -1,85 +1,72 @@
 package gobltin
 
 import (
-	"errors"
-	"path/filepath"
 	"testing"
 
 	"github.com/invopop/gobl.tin/test"
+	"github.com/invopop/gobl/bill"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLookupTin(t *testing.T) {
-	examples, err := test.GetDataGlob("*.json")
-	require.NoError(t, err)
+	tests := []struct {
+		name          string
+		file          string
+		expectedValid []bool
+		expectedError []error
+	}{
+		{
+			name:          "Valid invoice",
+			file:          "test/data/invoice-valid.json",
+			expectedValid: []bool{true, false},
+			expectedError: []error{nil, nil},
+		},
+		{
+			name:          "No customer",
+			file:          "test/data/invoice-no-customer.json",
+			expectedValid: []bool{false, false},
+			expectedError: []error{ErrNoParty, nil},
+		},
+		{
+			name:          "No tax ID",
+			file:          "test/data/invoice-no-taxid.json",
+			expectedValid: []bool{false, false},
+			expectedError: []error{ErrTaxID.WithMessage("no tax ID provided"), nil},
+		},
+		{
+			name:          "Invalid Country",
+			file:          "test/data/invoice-invalid-country.json",
+			expectedValid: []bool{true, false},
+			expectedError: []error{nil, ErrNotSupported.WithMessage("country code not supported")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env, err := test.LoadTestEnvelope(tt.file)
+			require.NoError(t, err)
+			inv, ok := env.Extract().(*bill.Invoice)
+			require.True(t, ok)
 
-	for _, example := range examples {
-		env, err := test.LoadTestEnvelope(example)
-		require.NoError(t, err)
+			customer := inv.Customer
+			supplier := inv.Supplier
 
-		results, err := LookupTin(env, Both)
+			resultCust, errCust := LookupTin(customer)
+			resultSupp, errSupp := LookupTin(supplier)
 
-		expectedResult, expectedErr := getExpectedResult(example)
-
-		if expectedErr != nil {
-			assert.Error(t, err)
-			assert.Equal(t, expectedErr.Error(), err.Error())
-		} else {
-			assert.NoError(t, err)
-			assert.Equal(t, expectedResult, results)
-		}
+			assert.Equal(t, tt.expectedValid[0], resultCust)
+			assert.Equal(t, tt.expectedValid[1], resultSupp)
+			if errCust == nil {
+				assert.Nil(t, tt.expectedError[0])
+			} else {
+				assert.Equal(t, tt.expectedError[0].Error(), errCust.Error())
+			}
+			if errSupp == nil {
+				assert.Nil(t, tt.expectedError[1])
+			} else {
+				assert.Equal(t, tt.expectedError[1].Error(), errSupp.Error())
+			}
+		})
 	}
 
-}
-
-// getExpectedResult returns the expected result for a given test file
-func getExpectedResult(filePath string) ([]*PartyTinResponse, error) {
-	// Here we define the expected result for the files in test/data
-	fileName := filepath.Base(filePath)
-	switch fileName {
-	case "invoice-valid.json":
-		return []*PartyTinResponse{
-			{
-				Party:   Customer,
-				Valid:   true,
-				Message: "customer: valid",
-			},
-			{
-				Party:   Supplier,
-				Valid:   false,
-				Message: "supplier: Tax ID Invalid, tax ID not found in database",
-			},
-		}, nil
-	case "empty.json":
-		return nil, errors.New("invalid type *schema.Object")
-	case "invoice-no-customer.json":
-		return []*PartyTinResponse{
-			{
-				Party:   Customer,
-				Valid:   false,
-				Message: "no customer found",
-			},
-			{
-				Party:   Supplier,
-				Valid:   false,
-				Message: "supplier: Tax ID Invalid, tax ID not found in database",
-			},
-		}, nil
-	case "invoice-no-taxid.json":
-		return []*PartyTinResponse{
-			{
-				Party:   Customer,
-				Valid:   false,
-				Message: "customer: Tax ID Invalid, no tax ID provided",
-			},
-			{
-				Party:   Supplier,
-				Valid:   false,
-				Message: "supplier: Tax ID Invalid, tax ID not found in database",
-			},
-		}, nil
-	default:
-		return nil, errors.New("unexpected file")
-	}
 }

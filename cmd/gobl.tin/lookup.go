@@ -7,6 +7,7 @@ import (
 
 	"github.com/invopop/gobl"
 	gobltin "github.com/invopop/gobl.tin"
+	"github.com/invopop/gobl/bill"
 	"github.com/spf13/cobra"
 )
 
@@ -57,29 +58,62 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parsing input as GOBL Envelope: %w", err)
 	}
 
-	var responses []*gobltin.PartyTinResponse
+	var valid bool
+
+	inv, ok := env.Extract().(*bill.Invoice)
+	if !ok {
+		return fmt.Errorf("invalid type %T", env.Document)
+	}
 
 	switch c.lookupType {
 	case "customer":
-		responses, err = gobltin.LookupTin(env, gobltin.Customer)
+		valid, err = gobltin.LookupTin(inv.Customer)
+		if err != nil {
+			return fmt.Errorf("looking up customer TIN number: %w", err)
+		}
+		if err := c.displayOutput("Customer", valid, cmd); err != nil {
+			return err
+		}
 	case "supplier":
-		responses, err = gobltin.LookupTin(env, gobltin.Supplier)
+		valid, err = gobltin.LookupTin(inv.Supplier)
+		if err != nil {
+			return fmt.Errorf("looking up supplier TIN number: %w", err)
+		}
+		if err := c.displayOutput("Supplier", valid, cmd); err != nil {
+			return err
+		}
 	case "both":
-		responses, err = gobltin.LookupTin(env, gobltin.Both)
+		valid, err = gobltin.LookupTin(inv.Customer)
+		if err != nil {
+			return fmt.Errorf("looking up customer TIN number: %w", err)
+		}
+		if err := c.displayOutput("Customer", valid, cmd); err != nil {
+			return err
+		}
+
+		valid, err = gobltin.LookupTin(inv.Supplier)
+		if err != nil {
+			return fmt.Errorf("looking up supplier TIN number: %w", err)
+		}
+		if err := c.displayOutput("Supplier", valid, cmd); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("invalid lookup type: %s, expected customer, supplier, or both", c.lookupType)
 	}
 
-	if err != nil {
-		return fmt.Errorf("looking up TIN number: %w", err)
-	}
+	return nil
+}
 
-	for _, response := range responses {
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\n", response.Message); err != nil {
+func (c *lookupOpts) displayOutput(party string, valid bool, cmd *cobra.Command) error {
+	if valid {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s Tax ID is VALID\n", party); err != nil {
 			return fmt.Errorf("writing output: %w", err)
 		}
-
+	} else {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s Tax ID is INVALID\n", party); err != nil {
+			return fmt.Errorf("writing output: %w", err)
+		}
 	}
-
 	return nil
 }
