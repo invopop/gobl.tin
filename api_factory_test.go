@@ -1,9 +1,10 @@
-package gobltin
+package tin
 
 import (
 	"reflect"
 	"testing"
 
+	"github.com/invopop/gobl.tin/api/vies"
 	"github.com/invopop/gobl/l10n"
 )
 
@@ -16,7 +17,7 @@ func TestGetTinLookup(t *testing.T) {
 		{
 			name:         "European Country Code",
 			countryCode:  "ES",
-			expectedType: reflect.TypeOf((*VIESLookup)(nil)).Elem(),
+			expectedType: reflect.TypeOf((*vies.VIESLookup)(nil)).Elem(),
 		},
 		{
 			name:         "Non-European Country Code",
@@ -28,7 +29,7 @@ func TestGetTinLookup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validator := GetTinLookup(tt.countryCode)
+			validator := GetLookupAPI(tt.countryCode)
 
 			if tt.expectedType == nil {
 				if validator != nil {

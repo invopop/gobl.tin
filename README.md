@@ -18,7 +18,7 @@ import (
 	"os"
 
 	"github.com/invopop/gobl"
-	gobltin "github.com/invopop/gobl.tin"
+	tin "github.com/invopop/gobl.tin"
 )
 
 func main() {
@@ -36,9 +36,10 @@ func main() {
 	}
 
 	ctx := context.Background()
+	c := tin.New()
 
-	valid, err = gobltin.LookupTin(ctx, inv.Customer)
-	valid, err = gobltin.LookupTin(ctx, inv.Supplier)
+	valid, err = tin.Lookup(ctx, inv.Customer)
+	valid, err = tin.Lookup(ctx, inv.Supplier)
 }
 ```
 

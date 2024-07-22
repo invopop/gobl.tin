@@ -1,4 +1,4 @@
-package gobltin
+package api
 
 import (
 	"errors"
@@ -13,17 +13,14 @@ type Error struct {
 }
 
 var (
-	// ErrNoParty implies that no party was provided.
-	ErrNoParty = NewError("No party provided")
-
-	// ErrTaxID used for errors with Tax ID validation
-	ErrTaxID = NewError("tax ID")
-
 	// ErrNotSupported is used when the country is not supported
 	ErrNotSupported = NewError("Country not supported")
 
 	// ErrNetwork is an error that appears when there is a network issue
 	ErrNetwork = NewError("network")
+
+	// ErrInput is an error that appears when the input is invalid
+	ErrInput = NewError("input")
 )
 
 func (e *Error) copy() *Error {

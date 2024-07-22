@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/invopop/gobl"
-	gobltin "github.com/invopop/gobl.tin"
+	tin "github.com/invopop/gobl.tin"
 	"github.com/invopop/gobl/bill"
 	"github.com/spf13/cobra"
 )
@@ -67,10 +67,11 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
+	tin := tin.New()
 
 	switch c.lookupType {
 	case "customer":
-		valid, err = gobltin.LookupTin(ctx, inv.Customer)
+		valid, err = tin.Lookup(ctx, inv.Customer)
 		if err != nil {
 			return fmt.Errorf("looking up customer TIN number: %w", err)
 		}
@@ -78,7 +79,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	case "supplier":
-		valid, err = gobltin.LookupTin(ctx, inv.Supplier)
+		valid, err = tin.Lookup(ctx, inv.Supplier)
 		if err != nil {
 			return fmt.Errorf("looking up supplier TIN number: %w", err)
 		}
@@ -86,7 +87,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	case "both":
-		valid, err = gobltin.LookupTin(ctx, inv.Customer)
+		valid, err = tin.Lookup(ctx, inv.Customer)
 		if err != nil {
 			return fmt.Errorf("looking up customer TIN number: %w", err)
 		}
@@ -94,7 +95,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		valid, err = gobltin.LookupTin(ctx, inv.Supplier)
+		valid, err = tin.Lookup(ctx, inv.Supplier)
 		if err != nil {
 			return fmt.Errorf("looking up supplier TIN number: %w", err)
 		}

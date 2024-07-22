@@ -1,4 +1,4 @@
-package gobltin
+package vies
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func TestViesLookup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			validator := VIESLookup{}
 			ctx := context.Background()
-			resp, err := validator.LookupTin(ctx, tt.tin)
+			resp, err := validator.LookupTIN(ctx, tt.tin)
 
 			if tt.expectError {
 				if err == nil {
@@ -51,8 +51,8 @@ func TestViesLookup(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
-				if resp.Valid != tt.expectedValid {
-					t.Errorf("Expected valid %v, got %v", tt.expectedValid, resp.Valid)
+				if resp != tt.expectedValid {
+					t.Errorf("Expected valid %v, got %v", tt.expectedValid, resp)
 				}
 			}
 		})
