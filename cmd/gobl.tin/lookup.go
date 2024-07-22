@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid type %T", env.Document)
 	}
 
-	ctx := cmd.Context()
+	ctx := context.Background()
 
 	switch c.lookupType {
 	case "customer":
