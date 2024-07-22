@@ -1,6 +1,7 @@
 package gobltin
 
 import (
+	"context"
 	"testing"
 
 	"github.com/invopop/gobl.tin/test"
@@ -50,9 +51,9 @@ func TestLookupTin(t *testing.T) {
 
 			customer := inv.Customer
 			supplier := inv.Supplier
-
-			resultCust, errCust := LookupTin(customer)
-			resultSupp, errSupp := LookupTin(supplier)
+			ctx := context.Background()
+			resultCust, errCust := LookupTin(ctx, customer)
+			resultSupp, errSupp := LookupTin(ctx, supplier)
 
 			assert.Equal(t, tt.expectedValid[0], resultCust)
 			assert.Equal(t, tt.expectedValid[1], resultSupp)

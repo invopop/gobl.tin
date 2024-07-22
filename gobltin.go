@@ -12,15 +12,15 @@ import (
 //
 // The user can choose to validate the customer, the supplier, or both, included as an argument.
 // If the party type is not provided, the function will validate only the customer.
-func LookupTin(party *org.Party) (bool, error) {
+func LookupTin(ctx context.Context, party *org.Party) (bool, error) {
 
 	if party == nil {
 		return false, ErrNoParty
 	}
 
-	// Create a new client and context
+	// Create a new client
 	c := New()
-	ctx := context.Background()
+	//ctx := context.Background()
 
 	// Validate there is a taxID
 	tid := party.TaxID

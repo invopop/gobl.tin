@@ -65,9 +65,11 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid type %T", env.Document)
 	}
 
+	ctx := cmd.Context()
+
 	switch c.lookupType {
 	case "customer":
-		valid, err = gobltin.LookupTin(inv.Customer)
+		valid, err = gobltin.LookupTin(ctx, inv.Customer)
 		if err != nil {
 			return fmt.Errorf("looking up customer TIN number: %w", err)
 		}
@@ -75,7 +77,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	case "supplier":
-		valid, err = gobltin.LookupTin(inv.Supplier)
+		valid, err = gobltin.LookupTin(ctx, inv.Supplier)
 		if err != nil {
 			return fmt.Errorf("looking up supplier TIN number: %w", err)
 		}
@@ -83,7 +85,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	case "both":
-		valid, err = gobltin.LookupTin(inv.Customer)
+		valid, err = gobltin.LookupTin(ctx, inv.Customer)
 		if err != nil {
 			return fmt.Errorf("looking up customer TIN number: %w", err)
 		}
@@ -91,7 +93,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		valid, err = gobltin.LookupTin(inv.Supplier)
+		valid, err = gobltin.LookupTin(ctx, inv.Supplier)
 		if err != nil {
 			return fmt.Errorf("looking up supplier TIN number: %w", err)
 		}

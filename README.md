@@ -35,8 +35,10 @@ func main() {
 		return nil, fmt.Errorf("invalid type %T", env.Document)
 	}
 
-	valid, err = gobltin.LookupTin(inv.Customer)
-	valid, err = gobltin.LookupTin(inv.Supplier)
+	ctx := context.Background()
+
+	valid, err = gobltin.LookupTin(ctx, inv.Customer)
+	valid, err = gobltin.LookupTin(ctx, inv.Supplier)
 }
 ```
 
