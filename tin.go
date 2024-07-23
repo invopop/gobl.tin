@@ -9,17 +9,20 @@ import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
+	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
 // Client encapsulates the TIN lookup logic.
-type Client struct{}
+type Client struct {
+	cache cmap.ConcurrentMap[string, bool]
+}
 
 // New creates a new Client instance.
 func New() *Client {
-	return &Client{}
+	return &Client{
+		cache: cmap.New[bool](),
+	}
 }
-
-// Add a cache to the client?
 
 // Lookup checks the validity of the TIN number
 //
@@ -46,15 +49,27 @@ func (c *Client) Lookup(ctx context.Context, in any) (bool, error) {
 }
 
 func (c *Client) lookupTaxID(ctx context.Context, tid *tax.Identity) (bool, error) {
-	validator := api.GetLookupAPI(tid.Country)
-	if validator == nil {
-		return false, ErrNotSupported.WithMessage("country code not supported")
+	// check the cache
+	var response bool
+	var err error
+	var ok bool
+
+	key := tid.String()
+
+	if response, ok = c.cache.Get(key); !ok {
+		validator := api.GetLookupAPI(tid.Country)
+		if validator == nil {
+			return false, ErrNotSupported.WithMessage("country code not supported")
+		}
+
+		response, err = validator.LookupTIN(ctx, tid)
+		if err != nil {
+			return false, ErrNetwork.WithMessage(err.Error())
+		}
+
+		c.cache.Set(key, response)
 	}
 
-	response, err := validator.LookupTIN(ctx, tid)
-	if err != nil {
-		return false, ErrNetwork.WithMessage(err.Error())
-	}
 	if !response {
 		return false, ErrInvalid.WithMessage("TIN is invalid")
 	}
