@@ -11,14 +11,17 @@ Copyright [Invopop Ltd.](https://invopop.com) 2024. Released publicly under the 
 Usage of the GOBL TIN lookup library is pretty straight forward. You must first have a GOBL Envelope including an invoice ready to convert. There are some samples here in the test/data directory.
 
 ```go
-package gobltin
+package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/invopop/gobl"
-	tin "github.com/invopop/gobl.tin"
+	"github.com/invopop/gobl/bill"
+	"github.com/invopop/gobl/gobl.tin"
 )
 
 func main() {
@@ -32,23 +35,52 @@ func main() {
 
 	inv, ok := env.Extract().(*bill.Invoice)
 	if !ok {
-		return nil, fmt.Errorf("invalid type %T", env.Document)
+		fmt.Errorf("invalid type %T", env.Document)
 	}
 
 	ctx := context.Background()
-	c := tin.New()
+	c := New()
 
 	// You can validate all the taxID in an invoice
-	valid, err := c.Lookup(ctx, inv)
+	err := c.Lookup(ctx, inv)
 
-	// You can validate each party 
-	valid, err = c.Lookup(ctx, inv.Customer)
-	valid, err = c.Lookup(ctx, inv.Supplier)
+	// You can validate each party
+	err = c.Lookup(ctx, inv.Customer)
+	err = c.Lookup(ctx, inv.Supplier)
 
 	// And you can validate independent Tax IDs
-	valid, err = c.Lookup(ctx, inv.Customer.TaxID)
+	err = c.Lookup(ctx, inv.Customer.TaxID)
 }
+
 ```
+
+### Handling errors
+
+There are 4 type of errors when doing lookup:
+- ErrInvalid: Error when the lookup service determines invalid the TaxID: could be because of the format or because it wasn't found on the database.
+- ErrInput: An error when the input is missing data like the taxId or the party
+- ErrNotSupported: An error when the country is not supported by our service
+- ErrNetwork: An error from doing the request, could be a 404, 500. This error does not mean that the taxId is wrong but that the request couldn't be made.
+
+```go
+err = c.Lookup(ctx, inv)
+
+if err != nil {
+	if e, ok := err.(*Error); ok {
+		if e.Is(ErrInvalid) {
+			// Case where the taxId is invalid
+		} else if e.Is(ErrInput) {
+			// Case where something from the input is wrong/missing (taxId, party)
+		} else if e.Is(ErrNotSupported) {
+			// Case where the country code is not supported
+		} else if e.Is(ErrNetwork) {
+			// Case where there is a error with the network/request
+		}
+	}
+}
+
+```
+
 
 ### Command Line
 

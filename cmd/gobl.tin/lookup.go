@@ -70,7 +70,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 
 	switch c.lookupType {
 	case "customer":
-		_, err := client.Lookup(ctx, inv.Customer)
+		err := client.Lookup(ctx, inv.Customer)
 		if err != nil {
 			var e *tin.Error
 			if errors.As(err, &e) {
@@ -87,7 +87,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("writing output: %w", err)
 		}
 	case "supplier":
-		_, err := client.Lookup(ctx, inv.Supplier)
+		err := client.Lookup(ctx, inv.Supplier)
 		if err != nil {
 			var e *tin.Error
 			if errors.As(err, &e) {
@@ -104,7 +104,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("writing output: %w", err)
 		}
 	case "both":
-		_, err := client.Lookup(ctx, inv)
+		err := client.Lookup(ctx, inv)
 		if err != nil {
 			var e *tin.Error
 			if errors.As(err, &e) {

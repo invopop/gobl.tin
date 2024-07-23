@@ -3,7 +3,6 @@ package tin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl/bill"
@@ -33,7 +32,7 @@ func New() *Client {
 // 2. If the input is a party, it will check the TIN of the party.
 //
 // 3. If the input is a tax ID, it will check the TIN.
-func (c *Client) Lookup(ctx context.Context, in any) (bool, error) {
+func (c *Client) Lookup(ctx context.Context, in any) error {
 
 	// 3 cases: invoice, party or tax ID
 	switch in := in.(type) {
@@ -44,11 +43,11 @@ func (c *Client) Lookup(ctx context.Context, in any) (bool, error) {
 	case *tax.Identity:
 		return c.lookupTaxID(ctx, in)
 	default:
-		return false, ErrInput.WithMessage("invalid input type")
+		return ErrInput.WithMessage("invalid input type")
 	}
 }
 
-func (c *Client) lookupTaxID(ctx context.Context, tid *tax.Identity) (bool, error) {
+func (c *Client) lookupTaxID(ctx context.Context, tid *tax.Identity) error {
 	// check the cache
 	var response bool
 	var err error
@@ -59,58 +58,56 @@ func (c *Client) lookupTaxID(ctx context.Context, tid *tax.Identity) (bool, erro
 	if response, ok = c.cache.Get(key); !ok {
 		validator := api.GetLookupAPI(tid.Country)
 		if validator == nil {
-			return false, ErrNotSupported.WithMessage("country code not supported")
+			return ErrNotSupported.WithMessage("country code not supported")
 		}
 
 		response, err = validator.LookupTIN(ctx, tid)
 		if err != nil {
-			return false, ErrNetwork.WithMessage(err.Error())
+			return ErrNetwork.WithMessage(err.Error())
 		}
 
 		c.cache.Set(key, response)
 	}
 
 	if !response {
-		return false, ErrInvalid.WithMessage("TIN is invalid")
+		return ErrInvalid.WithMessage("TIN is invalid")
 	}
-	return response, nil
+	return nil
 }
 
-func (c *Client) lookupParty(ctx context.Context, party *org.Party) (bool, error) {
+func (c *Client) lookupParty(ctx context.Context, party *org.Party) error {
 	tid := party.TaxID
 	if tid == nil {
-		return false, ErrInput.WithMessage("no tax ID provided")
+		return ErrInput.WithMessage("no tax ID provided")
 	}
 
 	return c.lookupTaxID(ctx, tid)
 }
 
-func (c *Client) lookupInvoice(ctx context.Context, inv *bill.Invoice) (bool, error) {
+func (c *Client) lookupInvoice(ctx context.Context, inv *bill.Invoice) error {
 	customer := inv.Customer
 	if customer == nil {
-		return false, ErrInput.WithMessage("no customer found")
+		return ErrInput.WithMessage("no customer found")
 	}
-	_, errCust := c.lookupParty(ctx, customer)
+	errCust := c.lookupParty(ctx, customer)
 	if errCust != nil {
-		var e *Error
-		if errors.As(errCust, &e) {
-			return false, e.WithMessage("Customer: " + e.Error())
+		if e, ok := errCust.(*Error); ok {
+			return e.WithMessage("Customer: " + e.Error())
 		}
-		return false, errCust
+		return errCust
 	}
 
 	supplier := inv.Supplier
 	if supplier == nil {
-		return false, ErrInput.WithMessage("no supplier found")
+		return ErrInput.WithMessage("no supplier found")
 	}
-	_, errSupp := c.lookupParty(ctx, supplier)
+	errSupp := c.lookupParty(ctx, supplier)
 	if errSupp != nil {
-		var e *Error
-		if errors.As(errSupp, &e) {
-			return false, e.WithMessage("Supplier: " + e.Error())
+		if e, ok := errSupp.(*Error); ok {
+			return e.WithMessage("Supplier: " + e.Error())
 		}
-		return false, errSupp
+		return errSupp
 	}
 
-	return true, nil
+	return nil
 }
