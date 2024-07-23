@@ -1,16 +1,15 @@
-package tin
+package api
 
 import (
-	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl.tin/api/vies"
 	"github.com/invopop/gobl/l10n"
 )
 
 // GetLookupAPI returns the TinLookup for a given country code
-func GetLookupAPI(countryCode l10n.CountryCode) api.LookupAPI {
+func GetLookupAPI(countryCode l10n.CountryCode) LookupAPI {
 	switch {
 	case isEuropeanCountryCode(countryCode): // For the moment it only supports VIES lookup
-		return vies.VIESLookup{}
+		return vies.API{}
 	// Add cases for other countries and their specific validators
 	default:
 		return nil // nil in case we don't have a validator for the country code

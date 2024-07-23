@@ -1,3 +1,4 @@
+// Package api handles all the API calls for the TIN lookup
 package api
 
 import (

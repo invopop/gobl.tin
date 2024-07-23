@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invopop/gobl.tin/api"
+	"github.com/invopop/gobl.tin/errors"
 	"github.com/invopop/gobl.tin/test"
 	"github.com/invopop/gobl/bill"
 	"github.com/stretchr/testify/assert"
@@ -28,19 +28,19 @@ func TestLookupTin(t *testing.T) {
 			name:          "No customer",
 			file:          "test/data/invoice-no-customer.json",
 			expectedValid: []bool{false, false},
-			expectedError: []error{api.ErrInput.WithMessage("no party provided"), nil},
+			expectedError: []error{errors.ErrInput.WithMessage("no party provided"), nil},
 		},
 		{
 			name:          "No tax ID",
 			file:          "test/data/invoice-no-taxid.json",
 			expectedValid: []bool{false, false},
-			expectedError: []error{api.ErrInput.WithMessage("no tax ID provided"), nil},
+			expectedError: []error{errors.ErrInput.WithMessage("no tax ID provided"), nil},
 		},
 		{
 			name:          "Invalid Country",
 			file:          "test/data/invoice-invalid-country.json",
 			expectedValid: []bool{true, false},
-			expectedError: []error{nil, api.ErrNotSupported.WithMessage("country code not supported")},
+			expectedError: []error{nil, errors.ErrNotSupported.WithMessage("country code not supported")},
 		},
 	}
 	for _, tt := range tests {

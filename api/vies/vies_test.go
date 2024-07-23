@@ -39,7 +39,7 @@ func TestViesLookup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validator := VIESLookup{}
+			validator := API{}
 			ctx := context.Background()
 			resp, err := validator.LookupTIN(ctx, tt.tin)
 

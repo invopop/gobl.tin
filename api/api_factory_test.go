@@ -1,4 +1,4 @@
-package tin
+package api
 
 import (
 	"reflect"
@@ -17,7 +17,7 @@ func TestGetTinLookup(t *testing.T) {
 		{
 			name:         "European Country Code",
 			countryCode:  "ES",
-			expectedType: reflect.TypeOf((*vies.VIESLookup)(nil)).Elem(),
+			expectedType: reflect.TypeOf((*vies.API)(nil)).Elem(),
 		},
 		{
 			name:         "Non-European Country Code",

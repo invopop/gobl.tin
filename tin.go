@@ -1,10 +1,11 @@
-// Package gobltin implements the lookup of TIN numbers
+// Package tin contains the first function that a user will call to lookup a TIN number.
 package tin
 
 import (
 	"context"
 
 	"github.com/invopop/gobl.tin/api"
+	"github.com/invopop/gobl.tin/errors"
 	"github.com/invopop/gobl/org"
 )
 
@@ -26,18 +27,18 @@ func New() *Client {
 func (c *Client) Lookup(ctx context.Context, party *org.Party) (bool, error) {
 
 	if party == nil {
-		return false, api.ErrInput.WithMessage("no party provided")
+		return false, errors.ErrInput.WithMessage("no party provided")
 	}
 
 	// Validate there is a taxID
 	tid := party.TaxID
 	if tid == nil {
-		return false, api.ErrInput.WithMessage("no tax ID provided")
+		return false, errors.ErrInput.WithMessage("no tax ID provided")
 	}
 
-	validator := GetLookupAPI(tid.Country)
+	validator := api.GetLookupAPI(tid.Country)
 	if validator == nil {
-		return false, api.ErrNotSupported.WithMessage("country code not supported")
+		return false, errors.ErrNotSupported.WithMessage("country code not supported")
 	}
 
 	response, err := validator.LookupTIN(ctx, tid)

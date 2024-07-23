@@ -1,4 +1,5 @@
-package api
+// Package errors provides a way to handle different errors in gobl.tin
+package errors
 
 import (
 	"errors"
