@@ -38,8 +38,15 @@ func main() {
 	ctx := context.Background()
 	c := tin.New()
 
-	valid, err = tin.Lookup(ctx, inv.Customer)
-	valid, err = tin.Lookup(ctx, inv.Supplier)
+	// You can validate all the taxID in an invoice
+	valid, err := c.Lookup(ctx, inv)
+
+	// You can validate each party 
+	valid, err = c.Lookup(ctx, inv.Customer)
+	valid, err = c.Lookup(ctx, inv.Supplier)
+
+	// And you can validate independent Tax IDs
+	valid, err = c.Lookup(ctx, inv.Customer.TaxID)
 }
 ```
 
