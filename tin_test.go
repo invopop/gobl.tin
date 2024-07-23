@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invopop/gobl.tin/errors"
 	"github.com/invopop/gobl.tin/test"
 	"github.com/invopop/gobl/bill"
 	"github.com/stretchr/testify/assert"
@@ -15,32 +14,32 @@ func TestLookupTin(t *testing.T) {
 	tests := []struct {
 		name          string
 		file          string
-		expectedValid []bool
-		expectedError []error
+		expectedValid bool
+		expectedError error
 	}{
 		{
 			name:          "Valid invoice",
 			file:          "test/data/invoice-valid.json",
-			expectedValid: []bool{true, false},
-			expectedError: []error{nil, nil},
+			expectedValid: false,
+			expectedError: ErrInvalid.WithMessage("Supplier: TIN is invalid"),
 		},
 		{
 			name:          "No customer",
 			file:          "test/data/invoice-no-customer.json",
-			expectedValid: []bool{false, false},
-			expectedError: []error{errors.ErrInput.WithMessage("no party provided"), nil},
+			expectedValid: false,
+			expectedError: ErrInput.WithMessage("no customer found"),
 		},
 		{
 			name:          "No tax ID",
 			file:          "test/data/invoice-no-taxid.json",
-			expectedValid: []bool{false, false},
-			expectedError: []error{errors.ErrInput.WithMessage("no tax ID provided"), nil},
+			expectedValid: false,
+			expectedError: ErrInput.WithMessage("Customer: no tax ID provided"),
 		},
 		{
 			name:          "Invalid Country",
 			file:          "test/data/invoice-invalid-country.json",
-			expectedValid: []bool{true, false},
-			expectedError: []error{nil, errors.ErrNotSupported.WithMessage("country code not supported")},
+			expectedValid: false,
+			expectedError: ErrNotSupported.WithMessage("Supplier: country code not supported"),
 		},
 	}
 	for _, tt := range tests {
@@ -50,12 +49,20 @@ func TestLookupTin(t *testing.T) {
 			inv, ok := env.Extract().(*bill.Invoice)
 			require.True(t, ok)
 
-			customer := inv.Customer
-			supplier := inv.Supplier
 			ctx := context.Background()
 			c := New()
 
-			resultCust, errCust := c.Lookup(ctx, customer)
+			result, err := c.Lookup(ctx, inv)
+
+			assert.Equal(t, tt.expectedValid, result)
+			if err == nil {
+				assert.Nil(t, tt.expectedError)
+			} else {
+				assert.Equal(t, tt.expectedError.Error(), err.Error())
+				assert.IsType(t, tt.expectedError, err)
+			}
+
+			/*resultCust, errCust := c.Lookup(ctx, customer)
 			resultSupp, errSupp := c.Lookup(ctx, supplier)
 
 			assert.Equal(t, tt.expectedValid[0], resultCust)
@@ -69,7 +76,7 @@ func TestLookupTin(t *testing.T) {
 				assert.Nil(t, tt.expectedError[1])
 			} else {
 				assert.Equal(t, tt.expectedError[1].Error(), errSupp.Error())
-			}
+			}*/
 		})
 	}
 

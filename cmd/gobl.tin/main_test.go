@@ -25,17 +25,17 @@ func Test_root(t *testing.T) {
 		{
 			name:     "default customer lookup",
 			args:     []string{"lookup", "./test/data/invoice-valid.json"},
-			expected: "Customer Tax ID is VALID\n",
+			expected: "Customer: TIN is valid\n",
 		},
 		{
 			name:     "supplier lookup",
 			args:     []string{"lookup", "./test/data/invoice-valid.json", "--type", "supplier"},
-			expected: "Supplier Tax ID is INVALID\n",
+			expected: "TIN is invalid",
 		},
 		{
 			name:     "both lookup",
 			args:     []string{"lookup", "./test/data/invoice-valid.json", "--type", "both"},
-			expected: "Customer Tax ID is VALID\nSupplier Tax ID is INVALID\n",
+			expected: "Supplier: TIN is invalid",
 		},
 		{
 			name: "lookup no args",

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -59,65 +60,69 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parsing input as GOBL Envelope: %w", err)
 	}
 
-	var valid bool
-
 	inv, ok := env.Extract().(*bill.Invoice)
 	if !ok {
 		return fmt.Errorf("invalid type %T", env.Document)
 	}
 
 	ctx := context.Background()
-	tin := tin.New()
+	client := tin.New()
 
 	switch c.lookupType {
 	case "customer":
-		valid, err = tin.Lookup(ctx, inv.Customer)
+		_, err := client.Lookup(ctx, inv.Customer)
 		if err != nil {
-			return fmt.Errorf("looking up customer TIN number: %w", err)
+			var e *tin.Error
+			if errors.As(err, &e) {
+				if e.Is(tin.ErrInvalid) {
+					if _, err := fmt.Fprint(cmd.OutOrStdout(), e.Error()); err != nil {
+						return fmt.Errorf("writing output: %w", err)
+					}
+					return nil
+				}
+				return fmt.Errorf("looking up customer TIN number: %w", err)
+			}
 		}
-		if err := c.displayOutput("Customer", valid, cmd); err != nil {
-			return err
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Customer: TIN is valid\n"); err != nil {
+			return fmt.Errorf("writing output: %w", err)
 		}
 	case "supplier":
-		valid, err = tin.Lookup(ctx, inv.Supplier)
+		_, err := client.Lookup(ctx, inv.Supplier)
 		if err != nil {
-			return fmt.Errorf("looking up supplier TIN number: %w", err)
+			var e *tin.Error
+			if errors.As(err, &e) {
+				if e.Is(tin.ErrInvalid) {
+					if _, err := fmt.Fprint(cmd.OutOrStdout(), e.Error()); err != nil {
+						return fmt.Errorf("writing output: %w", err)
+					}
+					return nil
+				}
+				return fmt.Errorf("looking up supplier TIN number: %w", err)
+			}
 		}
-		if err := c.displayOutput("Supplier", valid, cmd); err != nil {
-			return err
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Supplier: TIN is valid"); err != nil {
+			return fmt.Errorf("writing output: %w", err)
 		}
 	case "both":
-		valid, err = tin.Lookup(ctx, inv.Customer)
+		_, err := client.Lookup(ctx, inv)
 		if err != nil {
-			return fmt.Errorf("looking up customer TIN number: %w", err)
+			var e *tin.Error
+			if errors.As(err, &e) {
+				if e.Is(tin.ErrInvalid) {
+					if _, err := fmt.Fprint(cmd.OutOrStdout(), e.Error()); err != nil {
+						return fmt.Errorf("writing output: %w", err)
+					}
+					return nil
+				}
+				return fmt.Errorf("looking up TIN number: %w", err)
+			}
 		}
-		if err := c.displayOutput("Customer", valid, cmd); err != nil {
-			return err
-		}
-
-		valid, err = tin.Lookup(ctx, inv.Supplier)
-		if err != nil {
-			return fmt.Errorf("looking up supplier TIN number: %w", err)
-		}
-		if err := c.displayOutput("Supplier", valid, cmd); err != nil {
-			return err
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Customer: TIN is valid\nSupplier: Tax ID is valid"); err != nil {
+			return fmt.Errorf("writing output: %w", err)
 		}
 	default:
 		return fmt.Errorf("invalid lookup type: %s, expected customer, supplier, or both", c.lookupType)
 	}
 
-	return nil
-}
-
-func (c *lookupOpts) displayOutput(party string, valid bool, cmd *cobra.Command) error {
-	if valid {
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s Tax ID is VALID\n", party); err != nil {
-			return fmt.Errorf("writing output: %w", err)
-		}
-	} else {
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s Tax ID is INVALID\n", party); err != nil {
-			return fmt.Errorf("writing output: %w", err)
-		}
-	}
 	return nil
 }

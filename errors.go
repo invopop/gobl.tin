@@ -1,5 +1,4 @@
-// Package errors provides a way to handle different errors in gobl.tin
-package errors
+package tin
 
 import (
 	"errors"
@@ -22,6 +21,9 @@ var (
 
 	// ErrInput is an error that appears when the input is invalid
 	ErrInput = NewError("input")
+
+	// ErrInvalid is an error that appears when the TIN number is invalid
+	ErrInvalid = NewError("invalid TIN")
 )
 
 func (e *Error) copy() *Error {

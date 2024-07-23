@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/invopop/gobl.tin/errors"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/tax"
@@ -32,7 +31,7 @@ type CommonResponse struct {
 // CheckTINResponse is the response from a TIN lookup
 type CheckTINResponse struct {
 	Valid       bool   `json:"valid"`
-	CountryCode string `json:"countryCode"` // Cambiar estos campos por alguno relacionado con GOBL
+	CountryCode string `json:"countryCode"`
 	TinNumber   string `json:"vatNumber"`
 }
 
@@ -51,14 +50,14 @@ func (v API) LookupTIN(c context.Context, tid *tax.Identity) (bool, error) {
 		Post(viesAPIURL)
 
 	if err != nil {
-		return false, errors.ErrNetwork.WithMessage(err.Error())
+		return false, err
 	}
 
 	if resp.IsSuccess() {
 		var vatResponse CheckTINResponse
 		err := json.Unmarshal(resp.Body(), &vatResponse)
 		if err != nil {
-			return false, errors.ErrNetwork.WithMessage(err.Error())
+			return false, err
 		}
 		return vatResponse.Valid, nil
 	}
@@ -66,12 +65,12 @@ func (v API) LookupTIN(c context.Context, tid *tax.Identity) (bool, error) {
 	var commonResp CommonResponse
 	err = json.Unmarshal(resp.Body(), &commonResp)
 	if err != nil {
-		return false, errors.ErrNetwork.WithMessage(fmt.Sprintf("received %d status code with unknown body", resp.StatusCode()))
+		return false, fmt.Errorf("received %d status code with unknown body", resp.StatusCode())
 	}
 
 	if resp.StatusCode() == 400 || resp.StatusCode() == 500 {
-		return false, errors.ErrNetwork.WithMessage(fmt.Sprintf("received %d status code: %s", resp.StatusCode(), commonResp.Message))
+		return false, fmt.Errorf("received %d status code: %s", resp.StatusCode(), commonResp.Message)
 	}
 
-	return false, errors.ErrNetwork.WithMessage(fmt.Sprintf("received unexpected %d status code", resp.StatusCode()))
+	return false, fmt.Errorf("received unexpected %d status code", resp.StatusCode())
 }
