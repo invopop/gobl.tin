@@ -4,7 +4,7 @@ go 1.22.3
 
 require (
 	github.com/go-resty/resty/v2 v2.13.1
-	github.com/invopop/gobl v0.79.2
+	github.com/invopop/gobl v0.111.1
 	github.com/joho/godotenv v1.5.1
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/spf13/cobra v1.8.1
@@ -24,6 +24,7 @@ require (
 	github.com/invopop/jsonschema v0.12.0 // indirect
 	github.com/invopop/validation v0.3.0 // indirect
 	github.com/invopop/yaml v0.3.1 // indirect
+	github.com/magefile/mage v1.15.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
