@@ -19,8 +19,8 @@ type API struct{}
 
 // CheckVatRequest is the request body for the VIES API
 type CheckVatRequest struct {
-	CountryCode l10n.CountryCode `json:"countryCode"`
-	VatNumber   cbc.Code         `json:"vatNumber"`
+	CountryCode l10n.TaxCountryCode `json:"countryCode"`
+	VatNumber   cbc.Code            `json:"vatNumber"`
 }
 
 // CommonResponse is the response body for the VIES API
@@ -53,24 +53,25 @@ func (v API) LookupTIN(c context.Context, tid *tax.Identity) (bool, error) {
 		return false, err
 	}
 
-	if resp.IsSuccess() {
-		var vatResponse CheckTINResponse
-		err := json.Unmarshal(resp.Body(), &vatResponse)
-		if err != nil {
-			return false, err
+	if !resp.IsSuccess() {
+		var commonResp CommonResponse
+		if err = json.Unmarshal(resp.Body(), &commonResp); err != nil {
+			return false, fmt.Errorf("received %d status code with unknown body", resp.StatusCode())
 		}
-		return vatResponse.Valid, nil
+
+		code := resp.StatusCode()
+		switch code {
+		case 400, 500:
+			return false, fmt.Errorf("received %d status code: %s", code, commonResp.Message)
+		}
+
+		return false, fmt.Errorf("received unexpected %d status code", code)
 	}
 
-	var commonResp CommonResponse
-	err = json.Unmarshal(resp.Body(), &commonResp)
-	if err != nil {
-		return false, fmt.Errorf("received %d status code with unknown body", resp.StatusCode())
+	var vatResponse CheckTINResponse
+	if err = json.Unmarshal(resp.Body(), &vatResponse); err != nil {
+		return false, err
 	}
 
-	if resp.StatusCode() == 400 || resp.StatusCode() == 500 {
-		return false, fmt.Errorf("received %d status code: %s", resp.StatusCode(), commonResp.Message)
-	}
-
-	return false, fmt.Errorf("received unexpected %d status code", resp.StatusCode())
+	return vatResponse.Valid, nil
 }
