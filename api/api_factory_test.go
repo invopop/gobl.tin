@@ -11,7 +11,7 @@ import (
 func TestGetTinLookup(t *testing.T) {
 	tests := []struct {
 		name         string
-		countryCode  l10n.CountryCode
+		countryCode  l10n.TaxCountryCode
 		expectedType reflect.Type
 	}{
 		{
