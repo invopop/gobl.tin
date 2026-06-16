@@ -1,0 +1,29 @@
+version: "2"
+linters:
+  enable:
+    - goconst
+    - gocyclo
+    - misspell
+    - nakedret
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    goconst:
+      ignore-tests: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
