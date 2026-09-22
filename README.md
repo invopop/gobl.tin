@@ -62,11 +62,17 @@ func main() {
 	fmt.Println("supplier valid:", res.Supplier.Valid)
 
 	// Look up a single party.
-	pres, _ := c.LookupParty(ctx, inv.Customer)
+	pres, err := c.LookupParty(ctx, inv.Customer)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(pres.Valid, pres.Name, pres.Source)
 
 	// Look up an independent tax identity.
-	ires, _ := c.LookupIdentity(ctx, inv.Customer.TaxID)
+	ires, err := c.LookupIdentity(ctx, inv.Customer.TaxID)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(ires.Valid)
 }
 ```

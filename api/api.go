@@ -38,6 +38,7 @@ type Result struct {
 // LookupAPI is the interface that TIN registry clients implement.
 type LookupAPI interface {
 	// LookupTIN checks the tax identity against the registry. An unknown or
-	// malformed-per-registry number yields Valid false, not an error.
+	// unregistered number yields Valid false, not an error. Malformed input,
+	// including a number the registry rejects as badly formed, is ErrInput.
 	LookupTIN(ctx context.Context, tid *tax.Identity) (*Result, error)
 }
