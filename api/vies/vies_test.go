@@ -110,22 +110,32 @@ func TestLookupTIN(t *testing.T) {
 		assert.Nil(t, res)
 		assert.ErrorIs(t, err, api.ErrInput)
 		assert.Contains(t, err.Error(), "Invalid VAT number format")
+		var e *api.Error
+		require.True(t, errors.As(err, &e))
+		assert.Equal(t, "400", e.Code())
 	})
 
-	t.Run("server error maps to network error", func(t *testing.T) {
+	t.Run("server error maps to server error with code", func(t *testing.T) {
 		a := serve(t, http.StatusInternalServerError, `{"message": "MS_UNAVAILABLE"}`, nil)
 		_, err := a.LookupTIN(context.Background(), tid)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrNetwork)
+		assert.ErrorIs(t, err, api.ErrServer)
+		assert.NotErrorIs(t, err, api.ErrNetwork)
 		assert.Contains(t, err.Error(), "MS_UNAVAILABLE")
+		var e *api.Error
+		require.True(t, errors.As(err, &e))
+		assert.Equal(t, "500", e.Code())
 	})
 
 	t.Run("failure with unreadable body", func(t *testing.T) {
 		a := serve(t, http.StatusBadGateway, `<html>bad gateway</html>`, nil)
 		_, err := a.LookupTIN(context.Background(), tid)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrNetwork)
-		assert.Contains(t, err.Error(), "received 502 status code with unknown body")
+		assert.ErrorIs(t, err, api.ErrServer)
+		var e *api.Error
+		require.True(t, errors.As(err, &e))
+		assert.Equal(t, "502", e.Code())
+		assert.Contains(t, err.Error(), "<html>bad gateway</html>")
 	})
 
 	t.Run("rate limited with Retry-After", func(t *testing.T) {

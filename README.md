@@ -10,7 +10,18 @@ Copyright [Invopop Ltd.](https://invopop.com) 2024. Released publicly under the 
 
 A lookup returns a `Result`, never a bare yes/no error. An invalid TIN is an ordinary `Result` with `Valid` set to `false` and a `nil` error. Errors are reserved for cases where the registry could not answer.
 
-The client is stateless: it holds no cache, so every call reaches the registry. Caching is the consuming application's decision.
+The client holds no cache, so every call reaches the registry. Caching is the consuming application's decision. The registry clients are built once per `Client` and reused, so lookups share connections. Requests time out after 15 seconds by default.
+
+Configure the client with options:
+
+```go
+c := tin.New(
+	// Pass options through to the VIES client.
+	tin.WithVIESOptions(vies.WithTimeout(5*time.Second), vies.WithBaseURL(url)),
+	// Or replace the VIES registry entirely, for example with a fake in tests.
+	tin.WithVIES(myRegistry),
+)
+```
 
 ```go
 package main
@@ -71,12 +82,13 @@ A `Result` carries:
 
 An invalid TIN is not an error. The error taxonomy covers only the cases where the registry could not answer:
 
-- `ErrInput`: the input is malformed or incomplete. A missing tax ID, an empty code, or a request the registry rejected as badly formed.
+- `ErrInput`: the input is malformed or incomplete. A missing tax ID, an empty code, or a request the registry rejected as badly formed (HTTP 400).
 - `ErrNotSupported`: no registry covers the country.
-- `ErrNetwork`: the request failed. A transport failure or a registry server error. It says nothing about the TIN.
-- `RateLimitedError`: the registry's request budget is exhausted. It carries a `RetryAfter` duration so the caller can requeue with a precise delay.
+- `ErrNetwork`: the request failed below HTTP. A dial error, a timeout, or a response that could not be decoded. It says nothing about the TIN.
+- `ErrServer`: the registry answered with an unexpected status, for example a 500. The HTTP status is available through the `Code()` accessor.
+- `RateLimitedError`: the registry's request budget is exhausted (HTTP 429). It carries a `RetryAfter` duration so the caller can requeue with a precise delay.
 
-Match the sentinels with `errors.Is` and `RateLimitedError` with `errors.As`:
+Errors that come from an HTTP response carry the status as a string via `Code()`, so callers can distinguish statuses structurally instead of parsing messages. Match the sentinels with `errors.Is` and `RateLimitedError` with `errors.As`:
 
 ```go
 res, err := c.LookupInvoice(ctx, inv, tin.InvoicePartyBoth)
@@ -89,8 +101,10 @@ if err != nil {
 		// The country code is not supported.
 	case errors.As(err, &rl):
 		// Retry after rl.RetryAfter.
+	case errors.Is(err, tin.ErrServer):
+		// The registry failed to answer.
 	case errors.Is(err, tin.ErrNetwork):
-		// The request could not be made or the registry failed.
+		// The request could not be made.
 	}
 	return err
 }

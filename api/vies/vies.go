@@ -141,29 +141,37 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 // statusError maps a non-2xx response onto the api error taxonomy.
 func statusError(resp *resty.Response) error {
 	code := resp.StatusCode()
-	msg := errorMessage(resp.Body(), code)
+	status := strconv.Itoa(code)
+	msg := errorMessage(resp.Body())
 
 	switch code {
 	case http.StatusBadRequest:
 		// VIES answers 400 when the request itself is malformed, for example
 		// a number with symbols in it. That is a problem with the input, not
-		// with the network.
-		return api.ErrInput.WithMessage(msg)
+		// with the registry.
+		return api.ErrInput.WithCode(status).WithMessage(msg)
 	case http.StatusTooManyRequests:
 		return &api.RateLimitedError{RetryAfter: retryAfter(resp.Header())}
 	default:
-		return api.ErrNetwork.WithMessage(msg)
+		// VIES has no auth and no per-resource statuses, so everything else,
+		// including edge responses such as 403, is the registry failing to
+		// answer.
+		return api.ErrServer.WithCode(status).WithMessage(msg)
 	}
 }
 
 // errorMessage extracts a readable message from the VIES error body, falling
-// back to the status code when the body is not the expected shape.
-func errorMessage(body []byte, code int) string {
+// back to the raw body when it is not the expected shape.
+func errorMessage(body []byte) string {
 	out := new(errorResponse)
 	if err := json.Unmarshal(body, out); err == nil && out.Message != "" {
-		return "received " + strconv.Itoa(code) + " status code: " + out.Message
+		return out.Message
 	}
-	return "received " + strconv.Itoa(code) + " status code with unknown body"
+	const maxRaw = 200
+	if len(body) > maxRaw {
+		return string(body[:maxRaw])
+	}
+	return string(body)
 }
 
 // retryAfter works out how long to wait before retrying, preferring the

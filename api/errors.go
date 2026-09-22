@@ -3,21 +3,33 @@ package api
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
 // ABOUT: An invalid TIN is not represented here at all; it is a Result with
 // Valid false. Errors cover only the cases where the registry could not give
 // an answer. Callers match on the sentinels with errors.Is and on
-// RateLimitedError with errors.As.
+// RateLimitedError with errors.As. Errors that come from an HTTP response
+// carry the status via Code(), so callers can distinguish structurally.
+//
+// Registry clients map HTTP statuses as follows: 400 is ErrInput, 429 is
+// RateLimitedError, and every other unexpected status, including edge
+// responses such as 403, is ErrServer with the status as its code. ErrNetwork
+// is reserved for failures below HTTP: dial, timeout, and unreadable bodies.
 
 var (
 	// ErrNotSupported is returned when no registry covers the country.
 	ErrNotSupported = NewError("not-supported")
 
-	// ErrNetwork wraps transport failures and registry server errors. It does
-	// not say anything about the TIN, only that the request failed.
+	// ErrNetwork wraps transport failures: dial errors, timeouts, and
+	// responses that could not be decoded. It says nothing about the TIN,
+	// only that the request failed.
 	ErrNetwork = NewError("network")
+
+	// ErrServer is returned when the registry answered with an unexpected
+	// status. The HTTP status is available via Code().
+	ErrServer = NewError("server")
 
 	// ErrInput is returned when the input is malformed or incomplete: a
 	// missing tax ID, an empty code, or a request the registry rejected as
@@ -40,6 +52,7 @@ func (e *RateLimitedError) Error() string {
 // Error contains the standard error definition for this domain.
 type Error struct {
 	key     string
+	code    string
 	cause   error
 	message string
 }
@@ -63,6 +76,19 @@ func (e *Error) WithCause(cause error) *Error {
 	return ne
 }
 
+// WithCode adds a code to the error, usually the HTTP status.
+func (e *Error) WithCode(code string) *Error {
+	ne := e.copy()
+	ne.code = code
+	return ne
+}
+
+// Code provides the code of the error, usually the HTTP status, or an empty
+// string when there is none.
+func (e *Error) Code() string {
+	return e.code
+}
+
 // WithMessage adds a message to the Error.
 func (e *Error) WithMessage(message string) *Error {
 	ne := e.copy()
@@ -77,16 +103,17 @@ func (e *Error) WithMsgf(message string, args ...any) *Error {
 
 // Error provides the string representation of the error.
 func (e *Error) Error() string {
-	if e.message == "" {
-		if e.cause == nil {
-			return e.key
-		}
-		return fmt.Sprintf("%s: %s", e.key, e.cause.Error())
+	out := []string{e.key}
+	if e.code != "" {
+		out = append(out, e.code)
 	}
-	if e.cause == nil {
-		return fmt.Sprintf("%s: %s", e.key, e.message)
+	if e.message != "" {
+		out = append(out, e.message)
 	}
-	return fmt.Sprintf("%s: %s (%s)", e.key, e.message, e.cause.Error())
+	if e.cause != nil {
+		out = append(out, e.cause.Error())
+	}
+	return strings.Join(out, ": ")
 }
 
 // Is checks to see if the target error matches the current error or part of

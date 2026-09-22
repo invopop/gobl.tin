@@ -19,8 +19,13 @@ var (
 	// ErrNotSupported is returned when no registry covers the country.
 	ErrNotSupported = api.ErrNotSupported
 
-	// ErrNetwork wraps transport failures and registry server errors.
+	// ErrNetwork wraps transport failures: dial errors, timeouts, and
+	// responses that could not be decoded.
 	ErrNetwork = api.ErrNetwork
+
+	// ErrServer is returned when the registry answered with an unexpected
+	// status. The HTTP status is available via Code().
+	ErrServer = api.ErrServer
 
 	// ErrInput is returned when the input is malformed or incomplete.
 	ErrInput = api.ErrInput
