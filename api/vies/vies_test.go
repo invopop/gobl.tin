@@ -153,6 +153,20 @@ func TestLookupTIN(t *testing.T) {
 		assert.ErrorIs(t, err, api.ErrNetwork)
 	})
 
+	t.Run("sends identifying user agent", func(t *testing.T) {
+		var got string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = r.Header.Get("User-Agent")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(viesValidBody))
+		}))
+		t.Cleanup(srv.Close)
+		a := New(WithBaseURL(srv.URL))
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.NoError(t, err)
+		assert.Equal(t, userAgent, got)
+	})
+
 	t.Run("network failure", func(t *testing.T) {
 		// A server that is already closed refuses the connection, which is
 		// the closest offline stand-in for a network failure.
@@ -162,5 +176,22 @@ func TestLookupTIN(t *testing.T) {
 		_, err := a.LookupTIN(context.Background(), tid)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, api.ErrNetwork)
+	})
+}
+
+func TestNew(t *testing.T) {
+	t.Run("default timeout", func(t *testing.T) {
+		a := New()
+		assert.Equal(t, DefaultTimeout, a.HTTPClient().Timeout)
+	})
+
+	t.Run("WithTimeout overrides the default", func(t *testing.T) {
+		a := New(WithTimeout(3 * time.Second))
+		assert.Equal(t, 3*time.Second, a.HTTPClient().Timeout)
+	})
+
+	t.Run("HTTPClient exposes the underlying client", func(t *testing.T) {
+		a := New()
+		require.NotNil(t, a.HTTPClient())
 	})
 }

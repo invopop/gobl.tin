@@ -20,8 +20,18 @@ import (
 // Source identifies VIES as the registry in lookup results.
 const Source cbc.Key = "vies"
 
-// DefaultBaseURL is the production VIES REST endpoint.
+// DefaultBaseURL is the production VIES REST endpoint. It is the default
+// because VIES lookups are read-only and have no side effects, and the
+// Commission provides no test environment, so lookups always run against
+// production.
 const DefaultBaseURL = "https://ec.europa.eu/taxation_customs/vies/rest-api"
+
+// DefaultTimeout bounds a single API call.
+const DefaultTimeout = 15 * time.Second
+
+// userAgent identifies this library to the Commission's edge, which has been
+// seen blocking clients that send default Go user agents.
+const userAgent = "gobl.tin (+https://github.com/invopop/gobl.tin)"
 
 const checkVatPath = "/check-vat-number"
 
@@ -32,6 +42,7 @@ const defaultRetryAfter = time.Minute
 // API implements the VIES lookup.
 type API struct {
 	baseURL string
+	timeout time.Duration
 	conn    *resty.Client
 }
 
@@ -46,16 +57,33 @@ func WithBaseURL(url string) Option {
 	}
 }
 
+// WithTimeout overrides the default bound on a single API call.
+func WithTimeout(d time.Duration) Option {
+	return func(a *API) {
+		a.timeout = d
+	}
+}
+
 // New creates a new VIES API client.
 func New(opts ...Option) *API {
 	a := &API{
 		baseURL: DefaultBaseURL,
+		timeout: DefaultTimeout,
 	}
 	for _, opt := range opts {
 		opt(a)
 	}
-	a.conn = resty.New().SetBaseURL(a.baseURL)
+	a.conn = resty.New().
+		SetBaseURL(a.baseURL).
+		SetTimeout(a.timeout).
+		SetHeader("User-Agent", userAgent)
 	return a
+}
+
+// HTTPClient returns the underlying HTTP client, which lets tests attach a
+// mock transport.
+func (a *API) HTTPClient() *http.Client {
+	return a.conn.GetClient()
 }
 
 // checkVatRequest is the request body for the VIES API.
