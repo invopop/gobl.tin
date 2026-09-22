@@ -17,6 +17,24 @@ func (c *Client) lookupAPIFor(countryCode l10n.TaxCountryCode) api.LookupAPI {
 	}
 }
 
+// Supported reports whether a registry covers the country, without
+// performing a lookup. A supported country can still yield errors at lookup
+// time; an unsupported one always yields ErrNotSupported.
+func Supported(countryCode l10n.TaxCountryCode) bool {
+	return isEuropeanCountryCode(countryCode)
+}
+
+// Countries returns the tax country codes a registry covers, in the order
+// the routing table declares them. The slice is a copy; callers may keep or
+// modify it.
+func Countries() []l10n.TaxCountryCode {
+	out := make([]l10n.TaxCountryCode, len(europeanCountryCodes))
+	for i, code := range europeanCountryCodes {
+		out[i] = l10n.TaxCountryCode(code)
+	}
+	return out
+}
+
 // List of all EU country codes supported by VIES.
 // XI is used for Northern Ireland when it needs to be distinguished from GB.
 // EL is not the official country code for Greece, but it is used by VIES.

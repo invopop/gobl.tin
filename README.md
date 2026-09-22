@@ -77,6 +77,10 @@ func main() {
 }
 ```
 
+Coverage is queryable without performing a lookup: `tin.Supported(country)`
+reports whether a registry covers the country, and `tin.Countries()` lists
+every covered tax country code.
+
 A `Result` carries:
 
 - `Valid`: whether the registry recognises the TIN.
