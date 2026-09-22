@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,11 @@ type API struct {
 	baseURL string
 	timeout time.Duration
 	conn    *resty.Client
+
+	// initErr records an invalid construction, such as an unparseable base
+	// URL. It is checked on every lookup so a misconfiguration surfaces as a
+	// clear error on the first call instead of an obscure transport failure.
+	initErr error
 }
 
 // Option configures the API.
@@ -72,6 +78,11 @@ func New(opts ...Option) *API {
 	}
 	for _, opt := range opts {
 		opt(a)
+	}
+	if u, err := url.Parse(a.baseURL); err != nil {
+		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q", a.baseURL).WithCause(err)
+	} else if u.Scheme != "http" && u.Scheme != "https" {
+		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q: scheme must be http or https", a.baseURL)
 	}
 	a.conn = resty.New().
 		SetBaseURL(a.baseURL).
@@ -107,6 +118,10 @@ type checkVatResponse struct {
 // LookupTIN checks the VAT number against VIES. An unregistered number is a
 // Result with Valid false, not an error.
 func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, error) {
+	if a.initErr != nil {
+		return nil, a.initErr
+	}
+
 	reqBody := checkVatRequest{
 		CountryCode: tid.Country,
 		VatNumber:   tid.Code,
@@ -114,7 +129,6 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 
 	resp, err := a.conn.R().
 		SetContext(ctx).
-		SetHeader("Content-Type", "application/json").
 		SetBody(reqBody).
 		Post(checkVatPath)
 	if err != nil {
@@ -169,7 +183,9 @@ func errorMessage(body []byte) string {
 	}
 	const maxRaw = 200
 	if len(body) > maxRaw {
-		return string(body[:maxRaw])
+		// Cutting on a byte boundary can split a multibyte rune; drop the
+		// partial sequence rather than emit invalid UTF-8.
+		return strings.ToValidUTF8(string(body[:maxRaw]), "")
 	}
 	return string(body)
 }

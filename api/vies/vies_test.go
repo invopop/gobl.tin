@@ -207,6 +207,29 @@ func TestLookupTIN(t *testing.T) {
 		assert.Equal(t, userAgent, got)
 	})
 
+	t.Run("timeout maps to network error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-r.Context().Done():
+			case <-time.After(2 * time.Second):
+			}
+			_, _ = w.Write([]byte(viesValidBody))
+		}))
+		t.Cleanup(srv.Close)
+		a := New(WithBaseURL(srv.URL), WithTimeout(50*time.Millisecond))
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, api.ErrNetwork)
+	})
+
+	t.Run("invalid base URL fails at first call", func(t *testing.T) {
+		a := New(WithBaseURL("not a url"))
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, api.ErrInput)
+		assert.Contains(t, err.Error(), "invalid base URL")
+	})
+
 	t.Run("network failure", func(t *testing.T) {
 		// A server that is already closed refuses the connection, which is
 		// the closest offline stand-in for a network failure.
