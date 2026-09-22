@@ -30,8 +30,8 @@ const DefaultBaseURL = "https://ec.europa.eu/taxation_customs/vies/rest-api"
 // DefaultTimeout bounds a single API call.
 const DefaultTimeout = 15 * time.Second
 
-// userAgent identifies this library to the Commission's edge, which has been
-// seen blocking clients that send default Go user agents.
+// userAgent identifies this library to the Commission's edge, which blocks
+// clients that send default Go user agents.
 const userAgent = "gobl.tin (+https://github.com/invopop/gobl.tin)"
 
 const checkVatPath = "/check-vat-number"
@@ -47,8 +47,7 @@ type API struct {
 	conn    *resty.Client
 
 	// initErr records an invalid construction, such as an unparseable base
-	// URL. It is checked on every lookup so a misconfiguration surfaces as a
-	// clear error on the first call instead of an obscure transport failure.
+	// URL. Lookups return it, so a misconfiguration surfaces on the first call.
 	initErr error
 }
 

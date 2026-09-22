@@ -50,8 +50,6 @@ func (e *RateLimitedError) Error() string {
 }
 
 // Code returns the HTTP status that produces this error, which is always 429.
-// It keeps the contract that errors originating from an HTTP response expose
-// their status through Code().
 func (e *RateLimitedError) Code() string {
 	return "429"
 }

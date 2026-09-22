@@ -6,13 +6,12 @@ import (
 )
 
 // lookupAPIFor returns the registry client for a country, or nil when no
-// registry covers it. The clients are built once when the Client is created,
-// so lookups reuse connections instead of dialing fresh each time.
+// registry covers it.
 func (c *Client) lookupAPIFor(countryCode l10n.TaxCountryCode) api.LookupAPI {
 	switch {
-	case isEuropeanCountryCode(countryCode): // For the moment it only supports VIES lookup
+	case isEuropeanCountryCode(countryCode):
 		return c.vies
-	// Add cases for other countries and their specific registries.
+	// Add cases here for new registries.
 	default:
 		return nil
 	}
