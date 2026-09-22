@@ -7,8 +7,8 @@ import (
 	"fmt"
 
 	"github.com/invopop/gobl.tin/api"
+	"github.com/invopop/gobl.tin/api/vies"
 	"github.com/invopop/gobl/bill"
-	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 )
@@ -49,20 +49,44 @@ type InvoiceResult struct {
 
 // Client dispatches TIN lookups to the registry for the identity's country.
 //
-// The Client is stateless: it holds no cache, so every call reaches the
-// registry. Caching, and how long an answer stays fresh, is the consuming
-// application's decision.
+// The Client holds no cache, so every call reaches the registry. Caching, and
+// how long an answer stays fresh, is the consuming application's decision.
+// The registry clients themselves are built once per Client and reused, so
+// lookups share connections.
 type Client struct {
-	// apiFor resolves the registry for a country. It defaults to the package
-	// factory and exists so that tests can point lookups at a local server.
-	apiFor func(l10n.TaxCountryCode) api.LookupAPI
+	viesOpts []vies.Option
+	vies     api.LookupAPI
+}
+
+// Option configures the Client.
+type Option func(*Client)
+
+// WithVIESOptions passes options through to the VIES client the Client
+// builds, for example a timeout or a different base URL.
+func WithVIESOptions(opts ...vies.Option) Option {
+	return func(c *Client) {
+		c.viesOpts = append(c.viesOpts, opts...)
+	}
+}
+
+// WithVIES replaces the VIES registry client entirely. It exists so that
+// tests and consumers can inject their own implementation.
+func WithVIES(registry api.LookupAPI) Option {
+	return func(c *Client) {
+		c.vies = registry
+	}
 }
 
 // New creates a new Client instance.
-func New() *Client {
-	return &Client{
-		apiFor: lookupAPIFor,
+func New(opts ...Option) *Client {
+	c := new(Client)
+	for _, opt := range opts {
+		opt(c)
 	}
+	if c.vies == nil {
+		c.vies = vies.New(c.viesOpts...)
+	}
+	return c
 }
 
 // LookupIdentity checks the tax identity against the registry for its country.
@@ -73,7 +97,7 @@ func (c *Client) LookupIdentity(ctx context.Context, tid *tax.Identity) (*Result
 	if tid.Code == "" {
 		return nil, ErrInput.WithMessage("no tax ID code provided")
 	}
-	registry := c.apiFor(tid.Country)
+	registry := c.lookupAPIFor(tid.Country)
 	if registry == nil {
 		return nil, ErrNotSupported.WithMsgf("country code %q not supported", tid.Country)
 	}

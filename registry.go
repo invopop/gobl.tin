@@ -2,16 +2,16 @@ package tin
 
 import (
 	"github.com/invopop/gobl.tin/api"
-	"github.com/invopop/gobl.tin/api/vies"
 	"github.com/invopop/gobl/l10n"
 )
 
 // lookupAPIFor returns the registry client for a country, or nil when no
-// registry covers it.
-func lookupAPIFor(countryCode l10n.TaxCountryCode) api.LookupAPI {
+// registry covers it. The clients are built once when the Client is created,
+// so lookups reuse connections instead of dialing fresh each time.
+func (c *Client) lookupAPIFor(countryCode l10n.TaxCountryCode) api.LookupAPI {
 	switch {
 	case isEuropeanCountryCode(countryCode): // For the moment it only supports VIES lookup
-		return vies.New()
+		return c.vies
 	// Add cases for other countries and their specific registries.
 	default:
 		return nil

@@ -6,11 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl.tin/api/vies"
 	"github.com/invopop/gobl.tin/test"
 	"github.com/invopop/gobl/bill"
-	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
@@ -27,14 +25,7 @@ func mockedClient(t *testing.T, body string) *Client {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := New()
-	c.apiFor = func(cc l10n.TaxCountryCode) api.LookupAPI {
-		if lookupAPIFor(cc) == nil {
-			return nil
-		}
-		return vies.New(vies.WithBaseURL(srv.URL))
-	}
-	return c
+	return New(WithVIESOptions(vies.WithBaseURL(srv.URL)))
 }
 
 const validBody = `{"countryCode":"DE","vatNumber":"282741168","valid":true,"name":"ACME GMBH","address":"---"}`
@@ -194,5 +185,30 @@ func TestLookupInvoice(t *testing.T) {
 		inv := loadInvoice(t, "test/data/invoice-valid.json")
 		_, err := c.LookupInvoice(ctx, inv, "everyone")
 		assert.ErrorIs(t, err, ErrInput)
+	})
+}
+
+// fakeRegistry is a canned api.LookupAPI implementation for injection tests.
+type fakeRegistry struct {
+	res *Result
+}
+
+func (f *fakeRegistry) LookupTIN(_ context.Context, _ *tax.Identity) (*Result, error) {
+	return f.res, nil
+}
+
+func TestNewClient(t *testing.T) {
+	t.Run("reuses one registry client across lookups", func(t *testing.T) {
+		c := New()
+		assert.Same(t, c.lookupAPIFor("ES"), c.lookupAPIFor("DE"))
+		assert.Nil(t, c.lookupAPIFor("US"))
+	})
+
+	t.Run("WithVIES injects a registry", func(t *testing.T) {
+		fake := &fakeRegistry{res: &Result{Valid: true, Source: "fake"}}
+		c := New(WithVIES(fake))
+		res, err := c.LookupIdentity(context.Background(), &tax.Identity{Country: "DE", Code: "282741168"})
+		require.NoError(t, err)
+		assert.Equal(t, "fake", string(res.Source))
 	})
 }
