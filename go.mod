@@ -6,7 +6,6 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/invopop/gobl v0.507.0
 	github.com/joho/godotenv v1.5.1
-	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	gitlab.com/flimzy/testy v0.15.0

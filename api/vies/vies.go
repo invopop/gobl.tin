@@ -1,21 +1,33 @@
-// Package vies implements the API call to the VIES service to validate a TIN number
+// Package vies implements the TIN lookup against the VIES service, the
+// European Commission's VAT number registry.
 package vies
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/tax"
 )
 
+// Source identifies VIES as the registry in lookup results.
+const Source cbc.Key = "vies"
+
 // DefaultBaseURL is the production VIES REST endpoint.
 const DefaultBaseURL = "https://ec.europa.eu/taxation_customs/vies/rest-api"
 
 const checkVatPath = "/check-vat-number"
+
+// defaultRetryAfter is used when VIES rate limits without a Retry-After
+// header. VIES does not document its limits, so this is a polite guess.
+const defaultRetryAfter = time.Minute
 
 // API implements the VIES lookup.
 type API struct {
@@ -46,27 +58,28 @@ func New(opts ...Option) *API {
 	return a
 }
 
-// CheckVatRequest is the request body for the VIES API
-type CheckVatRequest struct {
+// checkVatRequest is the request body for the VIES API.
+type checkVatRequest struct {
 	CountryCode l10n.TaxCountryCode `json:"countryCode"`
 	VatNumber   cbc.Code            `json:"vatNumber"`
 }
 
-// CommonResponse is the response body for the VIES API
-type CommonResponse struct {
+// errorResponse is the body VIES returns on failure statuses.
+type errorResponse struct {
 	Message string `json:"message"`
 }
 
-// CheckTINResponse is the response from a TIN lookup
-type CheckTINResponse struct {
-	Valid       bool   `json:"valid"`
-	CountryCode string `json:"countryCode"`
-	TinNumber   string `json:"vatNumber"`
+// checkVatResponse is the successful response from a VAT number check.
+type checkVatResponse struct {
+	Valid   bool   `json:"valid"`
+	Name    string `json:"name"`
+	Address string `json:"address"`
 }
 
-// LookupTIN validates existence of VAT number in VIES database
-func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (bool, error) {
-	reqBody := CheckVatRequest{
+// LookupTIN checks the VAT number against VIES. An unregistered number is a
+// Result with Valid false, not an error.
+func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, error) {
+	reqBody := checkVatRequest{
 		CountryCode: tid.Country,
 		VatNumber:   tid.Code,
 	}
@@ -76,30 +89,73 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (bool, error) {
 		SetHeader("Content-Type", "application/json").
 		SetBody(reqBody).
 		Post(checkVatPath)
-
 	if err != nil {
-		return false, err
+		return nil, api.ErrNetwork.WithCause(err)
 	}
 
 	if !resp.IsSuccess() {
-		var commonResp CommonResponse
-		if err = json.Unmarshal(resp.Body(), &commonResp); err != nil {
-			return false, fmt.Errorf("received %d status code with unknown body", resp.StatusCode())
-		}
-
-		code := resp.StatusCode()
-		switch code {
-		case 400, 500:
-			return false, fmt.Errorf("received %d status code: %s", code, commonResp.Message)
-		}
-
-		return false, fmt.Errorf("received unexpected %d status code", code)
+		return nil, statusError(resp)
 	}
 
-	var vatResponse CheckTINResponse
-	if err = json.Unmarshal(resp.Body(), &vatResponse); err != nil {
-		return false, err
+	var out checkVatResponse
+	if err := json.Unmarshal(resp.Body(), &out); err != nil {
+		return nil, api.ErrNetwork.WithMessage("decoding response").WithCause(err)
 	}
 
-	return vatResponse.Valid, nil
+	return &api.Result{
+		Valid:   out.Valid,
+		Name:    unmask(out.Name),
+		Address: unmask(out.Address),
+		Source:  Source,
+	}, nil
+}
+
+// statusError maps a non-2xx response onto the api error taxonomy.
+func statusError(resp *resty.Response) error {
+	code := resp.StatusCode()
+	msg := errorMessage(resp.Body(), code)
+
+	switch {
+	case code == http.StatusBadRequest:
+		// VIES answers 400 when the request itself is malformed, for example
+		// a number with symbols in it. That is a problem with the input, not
+		// with the network.
+		return api.ErrInput.WithMessage(msg)
+	case code == http.StatusTooManyRequests:
+		return &api.RateLimitedError{RetryAfter: retryAfter(resp.Header())}
+	default:
+		return api.ErrNetwork.WithMessage(msg)
+	}
+}
+
+// errorMessage extracts a readable message from the VIES error body, falling
+// back to the status code when the body is not the expected shape.
+func errorMessage(body []byte, code int) string {
+	out := new(errorResponse)
+	if err := json.Unmarshal(body, out); err == nil && out.Message != "" {
+		return "received " + strconv.Itoa(code) + " status code: " + out.Message
+	}
+	return "received " + strconv.Itoa(code) + " status code with unknown body"
+}
+
+// retryAfter works out how long to wait before retrying, preferring the
+// standard Retry-After header and falling back to a fixed default.
+func retryAfter(h http.Header) time.Duration {
+	if v := h.Get("Retry-After"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return defaultRetryAfter
+}
+
+// unmask cleans a VIES text field. Member states that do not disclose trader
+// details answer with "---", which callers should see as empty rather than as
+// a literal name or address.
+func unmask(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "---" {
+		return ""
+	}
+	return s
 }

@@ -2,10 +2,13 @@ package vies
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,22 +36,36 @@ const viesValidBody = `{
 	"traderCompanyTypeMatch": "NOT_PROCESSED"
 }`
 
+// viesValidNamedBody is a valid answer from a member state that discloses the
+// trader details.
+const viesValidNamedBody = `{
+	"countryCode": "DE",
+	"vatNumber": "282741168",
+	"requestDate": "2026-09-22T10:00:00.000Z",
+	"valid": true,
+	"name": "ACME GMBH",
+	"address": "MUSTERSTR. 1, 10115 BERLIN"
+}`
+
 const viesInvalidBody = `{
 	"countryCode": "CZ",
 	"vatNumber": "00000000",
 	"requestDate": "2026-09-22T10:00:00.000Z",
 	"valid": false,
-	"requestIdentifier": "",
 	"name": "---",
-	"address": "---",
-	"traderNameMatch": "NOT_PROCESSED"
+	"address": "---"
 }`
 
-// serve starts a test server that always answers with the given status and
-// body, and returns an API pointed at it.
-func serve(t *testing.T, status int, body string) *API {
+// serve starts a test server that always answers with the given status,
+// headers and body, and returns an API pointed at it.
+func serve(t *testing.T, status int, body string, header http.Header) *API {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		for k, vs := range header {
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
@@ -58,81 +75,92 @@ func serve(t *testing.T, status int, body string) *API {
 }
 
 func TestLookupTIN(t *testing.T) {
-	tests := []struct {
-		name       string
-		status     int
-		body       string
-		wantValid  bool
-		wantErr    string
-		wantAnyErr bool
-	}{
-		{
-			name:      "valid response",
-			status:    http.StatusOK,
-			body:      viesValidBody,
-			wantValid: true,
-		},
-		{
-			name:      "invalid response",
-			status:    http.StatusOK,
-			body:      viesInvalidBody,
-			wantValid: false,
-		},
-		{
-			name:    "bad request with message",
-			status:  http.StatusBadRequest,
-			body:    `{"message": "Invalid VAT number format"}`,
-			wantErr: "received 400 status code: Invalid VAT number format",
-		},
-		{
-			name:    "server error with message",
-			status:  http.StatusInternalServerError,
-			body:    `{"message": "MS_UNAVAILABLE"}`,
-			wantErr: "received 500 status code: MS_UNAVAILABLE",
-		},
-		{
-			name:       "malformed JSON",
-			status:     http.StatusOK,
-			body:       `{"valid": tru`,
-			wantAnyErr: true,
-		},
-		{
-			name:    "malformed JSON on failure status",
-			status:  http.StatusBadRequest,
-			body:    `<html>bad gateway</html>`,
-			wantErr: "received 400 status code with unknown body",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			api := serve(t, tt.status, tt.body)
-			tid := &tax.Identity{Country: "ES", Code: "B85905495"}
-
-			valid, err := api.LookupTIN(context.Background(), tid)
-
-			switch {
-			case tt.wantErr != "":
-				require.Error(t, err)
-				assert.Equal(t, tt.wantErr, err.Error())
-			case tt.wantAnyErr:
-				require.Error(t, err)
-			default:
-				require.NoError(t, err)
-				assert.Equal(t, tt.wantValid, valid)
-			}
-		})
-	}
-}
-
-func TestLookupTINNetworkFailure(t *testing.T) {
-	// A server that is already closed refuses the connection, which is the
-	// closest offline stand-in for a network failure.
-	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
-	srv.Close()
-	api := New(WithBaseURL(srv.URL))
-
 	tid := &tax.Identity{Country: "ES", Code: "B85905495"}
-	_, err := api.LookupTIN(context.Background(), tid)
-	require.Error(t, err)
+
+	t.Run("valid with masked details", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesValidBody, nil)
+		res, err := a.LookupTIN(context.Background(), tid)
+		require.NoError(t, err)
+		assert.True(t, res.Valid)
+		assert.Empty(t, res.Name)
+		assert.Empty(t, res.Address)
+		assert.Equal(t, Source, res.Source)
+	})
+
+	t.Run("valid with disclosed details", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesValidNamedBody, nil)
+		res, err := a.LookupTIN(context.Background(), tid)
+		require.NoError(t, err)
+		assert.True(t, res.Valid)
+		assert.Equal(t, "ACME GMBH", res.Name)
+		assert.Equal(t, "MUSTERSTR. 1, 10115 BERLIN", res.Address)
+	})
+
+	t.Run("invalid number is not an error", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesInvalidBody, nil)
+		res, err := a.LookupTIN(context.Background(), tid)
+		require.NoError(t, err)
+		assert.False(t, res.Valid)
+	})
+
+	t.Run("bad request maps to input error", func(t *testing.T) {
+		a := serve(t, http.StatusBadRequest, `{"message": "Invalid VAT number format"}`, nil)
+		res, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		assert.Nil(t, res)
+		assert.ErrorIs(t, err, api.ErrInput)
+		assert.Contains(t, err.Error(), "Invalid VAT number format")
+	})
+
+	t.Run("server error maps to network error", func(t *testing.T) {
+		a := serve(t, http.StatusInternalServerError, `{"message": "MS_UNAVAILABLE"}`, nil)
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, api.ErrNetwork)
+		assert.Contains(t, err.Error(), "MS_UNAVAILABLE")
+	})
+
+	t.Run("failure with unreadable body", func(t *testing.T) {
+		a := serve(t, http.StatusBadGateway, `<html>bad gateway</html>`, nil)
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, api.ErrNetwork)
+		assert.Contains(t, err.Error(), "received 502 status code with unknown body")
+	})
+
+	t.Run("rate limited with Retry-After", func(t *testing.T) {
+		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"30"}})
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		var rl *api.RateLimitedError
+		require.True(t, errors.As(err, &rl))
+		assert.Equal(t, 30*time.Second, rl.RetryAfter)
+	})
+
+	t.Run("rate limited without Retry-After", func(t *testing.T) {
+		a := serve(t, http.StatusTooManyRequests, `{}`, nil)
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		var rl *api.RateLimitedError
+		require.True(t, errors.As(err, &rl))
+		assert.Equal(t, defaultRetryAfter, rl.RetryAfter)
+	})
+
+	t.Run("malformed JSON on success status", func(t *testing.T) {
+		a := serve(t, http.StatusOK, `{"valid": tru`, nil)
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, api.ErrNetwork)
+	})
+
+	t.Run("network failure", func(t *testing.T) {
+		// A server that is already closed refuses the connection, which is
+		// the closest offline stand-in for a network failure.
+		srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+		srv.Close()
+		a := New(WithBaseURL(srv.URL))
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, api.ErrNetwork)
+	})
 }

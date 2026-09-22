@@ -1,86 +1,27 @@
 package tin
 
-import (
-	"errors"
-	"fmt"
-)
+import "github.com/invopop/gobl.tin/api"
 
-// Error contains the standard error definition for this domain.
-type Error struct {
-	errorType string
-	cause     error
-	message   string
-}
+// ABOUT: The error taxonomy lives in the api package so that registry clients
+// can return it without an import cycle. These aliases keep the root package
+// self-sufficient for consumers.
+//
+// An invalid TIN is not an error. It is a Result with Valid false.
+
+// Error is the structured error type used across the library.
+type Error = api.Error
+
+// RateLimitedError reports that a registry's request budget is exhausted and
+// how long to wait before retrying. Match it with errors.As.
+type RateLimitedError = api.RateLimitedError
 
 var (
-	// ErrNotSupported is used when the country is not supported
-	ErrNotSupported = NewError("Country not supported")
+	// ErrNotSupported is returned when no registry covers the country.
+	ErrNotSupported = api.ErrNotSupported
 
-	// ErrNetwork is an error that appears when there is a network issue
-	ErrNetwork = NewError("network")
+	// ErrNetwork wraps transport failures and registry server errors.
+	ErrNetwork = api.ErrNetwork
 
-	// ErrInput is an error that appears when the input is invalid
-	ErrInput = NewError("input")
-
-	// ErrInvalid is an error that appears when the TIN number is invalid
-	ErrInvalid = NewError("invalid TIN")
+	// ErrInput is returned when the input is malformed or incomplete.
+	ErrInput = api.ErrInput
 )
-
-func (e *Error) copy() *Error {
-	ne := new(Error)
-	*ne = *e
-	return ne
-}
-
-// NewError instantiates a new error.
-func NewError(errorType string) *Error {
-	return &Error{errorType: errorType}
-}
-
-// WithCause attaches any error instance to the Error.
-func (e *Error) WithCause(cause error) *Error {
-	ne := e.copy()
-	ne.cause = cause
-	return ne
-}
-
-// Error provides the string representation of the error.
-func (e *Error) Error() string {
-	if e.message == "" {
-		if e.cause == nil {
-			return e.errorType
-		}
-		return e.cause.Error()
-	}
-	if e.cause == nil {
-		return e.message
-	}
-	return fmt.Sprintf("%s (%s)", e.message, e.cause.Error())
-}
-
-// WithMessage adds a message to the Error.
-func (e *Error) WithMessage(message string) *Error {
-	ne := e.copy()
-	ne.message = message
-	return ne
-}
-
-// Is checks to see if the target error matches the current error or
-// part of the chain.
-func (e *Error) Is(target error) bool {
-	t, ok := target.(*Error)
-	if !ok {
-		return errors.Is(e.cause, target)
-	}
-	return e.errorType == t.errorType
-}
-
-// Cause returns the error that caused this error.
-func (e *Error) Cause() error {
-	return e.cause
-}
-
-// Message returns just the message component, if present
-func (e *Error) Message() string {
-	return e.message
-}

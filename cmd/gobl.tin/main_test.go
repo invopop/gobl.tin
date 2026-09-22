@@ -14,59 +14,92 @@ import (
 
 	"github.com/invopop/gobl"
 	tin "github.com/invopop/gobl.tin"
+	"github.com/invopop/gobl/bill"
 )
 
-// fakeClient implements tinLookuper with a canned answer per input.
+// fakeClient implements tinLookuper with a canned result per party.
 type fakeClient struct {
-	lookup func(in any) error
+	result func(party tin.InvoiceParty) (*tin.InvoiceResult, error)
 }
 
-func (f *fakeClient) Lookup(_ context.Context, in any) error {
-	return f.lookup(in)
+func (f *fakeClient) LookupInvoice(_ context.Context, _ *bill.Invoice, party tin.InvoiceParty) (*tin.InvoiceResult, error) {
+	return f.result(party)
 }
 
 // withFakeClient swaps the CLI's client for the duration of a test.
-func withFakeClient(t *testing.T, lookup func(in any) error) {
+func withFakeClient(t *testing.T, result func(party tin.InvoiceParty) (*tin.InvoiceResult, error)) {
 	t.Helper()
 	orig := newTinClient
-	newTinClient = func() tinLookuper { return &fakeClient{lookup: lookup} }
+	newTinClient = func() tinLookuper { return &fakeClient{result: result} }
 	t.Cleanup(func() { newTinClient = orig })
 }
 
+// resultsFor builds an InvoiceResult with the given per-party results,
+// honouring the requested party selector like the real client does.
+func resultsFor(customer, supplier *tin.Result) func(tin.InvoiceParty) (*tin.InvoiceResult, error) {
+	return func(party tin.InvoiceParty) (*tin.InvoiceResult, error) {
+		out := new(tin.InvoiceResult)
+		if party == tin.InvoicePartyCustomer || party == tin.InvoicePartyBoth {
+			out.Customer = customer
+		}
+		if party == tin.InvoicePartySupplier || party == tin.InvoicePartyBoth {
+			out.Supplier = supplier
+		}
+		if out.Customer == nil && out.Supplier == nil {
+			return nil, tin.ErrInput.WithMsgf("invalid party %q", party)
+		}
+		return out, nil
+	}
+}
+
 func Test_root(t *testing.T) {
-	allValid := func(any) error { return nil }
-	invalid := func(any) error { return tin.ErrInvalid.WithMessage("TIN is invalid") }
+	valid := &tin.Result{Valid: true, Source: "vies"}
+	validNamed := &tin.Result{Valid: true, Name: "ACME GMBH", Source: "vies"}
+	invalid := &tin.Result{Valid: false, Source: "vies"}
 
 	tests := []struct {
 		name     string
 		args     []string
-		lookup   func(in any) error
+		result   func(tin.InvoiceParty) (*tin.InvoiceResult, error)
 		err      error
 		expected string
 	}{
 		{
 			name:     "default customer lookup",
 			args:     []string{"lookup", "../../test/data/invoice-valid.json"},
-			lookup:   allValid,
-			expected: "Customer: TIN is valid\n",
+			result:   resultsFor(valid, valid),
+			expected: "Customer: TIN is valid (source: vies)\n",
+		},
+		{
+			name:     "customer lookup with name",
+			args:     []string{"lookup", "../../test/data/invoice-valid.json"},
+			result:   resultsFor(validNamed, valid),
+			expected: "Customer: TIN is valid (source: vies), name: ACME GMBH\n",
 		},
 		{
 			name:     "supplier lookup",
 			args:     []string{"lookup", "../../test/data/invoice-valid.json", "--type", "supplier"},
-			lookup:   allValid,
-			expected: "Supplier: TIN is valid",
+			result:   resultsFor(valid, valid),
+			expected: "Supplier: TIN is valid (source: vies)\n",
 		},
 		{
 			name:     "both lookup",
 			args:     []string{"lookup", "../../test/data/invoice-valid.json", "--type", "both"},
-			lookup:   allValid,
-			expected: "Customer: TIN is valid\nSupplier: Tax ID is valid",
+			result:   resultsFor(valid, valid),
+			expected: "Customer: TIN is valid (source: vies)\nSupplier: TIN is valid (source: vies)\n",
 		},
 		{
-			name:     "invalid TIN",
+			name:     "invalid TIN exits non-zero",
 			args:     []string{"lookup", "../../test/data/invoice-valid.json", "--type", "supplier"},
-			lookup:   invalid,
-			expected: "TIN is invalid",
+			result:   resultsFor(valid, invalid),
+			err:      errInvalidTIN,
+			expected: "Supplier: TIN is invalid (source: vies)\n",
+		},
+		{
+			name:   "lookup error",
+			args:   []string{"lookup", "../../test/data/invoice-valid.json"},
+			result: resultsFor(nil, nil),
+			err:    fmt.Errorf(`looking up TIN: input: invalid party "customer"`),
 		},
 		{
 			name: "lookup no args",
@@ -81,13 +114,12 @@ func Test_root(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.lookup != nil {
-				withFakeClient(t, tt.lookup)
+			if tt.result != nil {
+				withFakeClient(t, tt.result)
 			}
 
-			cmd := &cobra.Command{}
+			cmd := &cobra.Command{SilenceUsage: true, SilenceErrors: true}
 			rootOpts := &rootOpts{}
 			lookupCmd := lookup(rootOpts).cmd()
 
@@ -103,6 +135,8 @@ func Test_root(t *testing.T) {
 				assert.EqualError(t, err, tt.err.Error())
 			} else {
 				assert.NoError(t, err)
+			}
+			if tt.expected != "" {
 				assert.Equal(t, tt.expected, output.String())
 			}
 		})

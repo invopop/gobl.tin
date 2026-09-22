@@ -13,6 +13,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// errInvalidTIN makes the command exit non-zero when a lookup answers that a
+// TIN is invalid. The per-party status lines are already on stdout by then.
+var errInvalidTIN = errors.New("TIN is invalid")
+
 type lookupOpts struct {
 	*rootOpts
 	lookupType string
@@ -21,7 +25,7 @@ type lookupOpts struct {
 // tinLookuper is the slice of tin.Client this command uses. It exists so that
 // tests can substitute a fake client instead of dialing the live registry.
 type tinLookuper interface {
-	Lookup(ctx context.Context, in any) error
+	LookupInvoice(ctx context.Context, inv *bill.Invoice, party tin.InvoiceParty) (*tin.InvoiceResult, error)
 }
 
 // newTinClient builds the lookup client. Tests replace it.
@@ -44,7 +48,6 @@ func (c *lookupOpts) cmd() *cobra.Command {
 }
 
 func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
-
 	if len(args) != 1 {
 		return fmt.Errorf("expected exactly one input file, the command usage is `gobl.tin lookup <input>`")
 	}
@@ -74,64 +77,37 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid type %T", env.Document)
 	}
 
-	ctx := context.Background()
-	client := newTinClient()
-
-	switch c.lookupType {
-	case "customer":
-		err := client.Lookup(ctx, inv.Customer)
-		if err != nil {
-			var e *tin.Error
-			if errors.As(err, &e) {
-				if e.Is(tin.ErrInvalid) {
-					if _, err := fmt.Fprint(cmd.OutOrStdout(), e.Error()); err != nil {
-						return fmt.Errorf("writing output: %w", err)
-					}
-					return nil
-				}
-				return fmt.Errorf("looking up customer TIN number: %w", err)
-			}
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Customer: TIN is valid\n"); err != nil {
-			return fmt.Errorf("writing output: %w", err)
-		}
-	case "supplier":
-		err := client.Lookup(ctx, inv.Supplier)
-		if err != nil {
-			var e *tin.Error
-			if errors.As(err, &e) {
-				if e.Is(tin.ErrInvalid) {
-					if _, err := fmt.Fprint(cmd.OutOrStdout(), e.Error()); err != nil {
-						return fmt.Errorf("writing output: %w", err)
-					}
-					return nil
-				}
-				return fmt.Errorf("looking up supplier TIN number: %w", err)
-			}
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Supplier: TIN is valid"); err != nil {
-			return fmt.Errorf("writing output: %w", err)
-		}
-	case "both":
-		err := client.Lookup(ctx, inv)
-		if err != nil {
-			var e *tin.Error
-			if errors.As(err, &e) {
-				if e.Is(tin.ErrInvalid) {
-					if _, err := fmt.Fprint(cmd.OutOrStdout(), e.Error()); err != nil {
-						return fmt.Errorf("writing output: %w", err)
-					}
-					return nil
-				}
-				return fmt.Errorf("looking up TIN number: %w", err)
-			}
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Customer: TIN is valid\nSupplier: Tax ID is valid"); err != nil {
-			return fmt.Errorf("writing output: %w", err)
-		}
-	default:
-		return fmt.Errorf("invalid lookup type: %s, expected customer, supplier, or both", c.lookupType)
+	res, err := newTinClient().LookupInvoice(cmd.Context(), inv, tin.InvoiceParty(c.lookupType))
+	if err != nil {
+		return fmt.Errorf("looking up TIN: %w", err)
 	}
 
+	allValid := true
+	if res.Customer != nil {
+		printResult(cmd.OutOrStdout(), "Customer", res.Customer)
+		allValid = allValid && res.Customer.Valid
+	}
+	if res.Supplier != nil {
+		printResult(cmd.OutOrStdout(), "Supplier", res.Supplier)
+		allValid = allValid && res.Supplier.Valid
+	}
+
+	if !allValid {
+		return errInvalidTIN
+	}
 	return nil
+}
+
+// printResult writes one status line for a party: validity, source, and the
+// registered name when the registry disclosed one.
+func printResult(w io.Writer, label string, r *tin.Result) {
+	status := "invalid"
+	if r.Valid {
+		status = "valid"
+	}
+	line := fmt.Sprintf("%s: TIN is %s (source: %s)", label, status, r.Source)
+	if r.Name != "" {
+		line += ", name: " + r.Name
+	}
+	_, _ = fmt.Fprintln(w, line)
 }

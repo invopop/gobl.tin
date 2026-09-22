@@ -11,23 +11,25 @@ import (
 	"github.com/invopop/gobl.tin/test"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/l10n"
+	"github.com/invopop/gobl/org"
+	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // mockedClient returns a Client whose EU lookups go to a test server that
-// always reports the number as valid.
-func mockedClient(t *testing.T) *Client {
+// answers with the given body.
+func mockedClient(t *testing.T, body string) *Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"countryCode":"DE","vatNumber":"282741168","valid":true,"name":"---","address":"---"}`))
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 
 	c := New()
 	c.apiFor = func(cc l10n.TaxCountryCode) api.LookupAPI {
-		if api.GetLookupAPI(cc) == nil {
+		if lookupAPIFor(cc) == nil {
 			return nil
 		}
 		return vies.New(vies.WithBaseURL(srv.URL))
@@ -35,74 +37,162 @@ func mockedClient(t *testing.T) *Client {
 	return c
 }
 
-func TestLookupTin(t *testing.T) {
-	tests := []struct {
-		name          string
-		file          string
-		expectedError error
-	}{
-		{
-			name:          "Valid invoice",
-			file:          "test/data/invoice-valid.json",
-			expectedError: nil,
-		},
-		{
-			name:          "No customer",
-			file:          "test/data/invoice-no-customer.json",
-			expectedError: ErrInput.WithMessage("no customer found"),
-		},
-		{
-			name:          "No tax ID",
-			file:          "test/data/invoice-no-taxid.json",
-			expectedError: ErrInput.WithMessage("Customer: no tax ID provided"),
-		},
-		{
-			name:          "Invalid Country",
-			file:          "test/data/invoice-invalid-country.json",
-			expectedError: ErrNotSupported.WithMessage("Supplier: country code not supported"),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := test.LoadTestEnvelope(tt.file)
-			require.NoError(t, err)
-			inv, ok := env.Extract().(*bill.Invoice)
-			require.True(t, ok)
+const validBody = `{"countryCode":"DE","vatNumber":"282741168","valid":true,"name":"ACME GMBH","address":"---"}`
+const invalidBody = `{"countryCode":"DE","vatNumber":"282741168","valid":false,"name":"---","address":"---"}`
 
-			ctx := context.Background()
-			c := mockedClient(t)
-
-			err = c.Lookup(ctx, inv)
-
-			if tt.expectedError == nil {
-				assert.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				assert.Equal(t, tt.expectedError.Error(), err.Error())
-				assert.IsType(t, tt.expectedError, err)
-			}
-		})
-	}
-}
-
-func TestLookupTinInvalid(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"countryCode":"DE","vatNumber":"111111125","valid":false,"name":"---","address":"---"}`))
-	}))
-	t.Cleanup(srv.Close)
-
-	c := New()
-	c.apiFor = func(_ l10n.TaxCountryCode) api.LookupAPI {
-		return vies.New(vies.WithBaseURL(srv.URL))
-	}
-
-	env, err := test.LoadTestEnvelope("test/data/invoice-valid.json")
+func loadInvoice(t *testing.T, file string) *bill.Invoice {
+	t.Helper()
+	env, err := test.LoadTestEnvelope(file)
 	require.NoError(t, err)
 	inv, ok := env.Extract().(*bill.Invoice)
 	require.True(t, ok)
+	return inv
+}
 
-	err = c.Lookup(context.Background(), inv)
-	require.Error(t, err)
-	assert.Equal(t, ErrInvalid.WithMessage("Customer: TIN is invalid").Error(), err.Error())
+func TestLookupIdentity(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("valid TIN", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		res, err := c.LookupIdentity(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
+		require.NoError(t, err)
+		assert.True(t, res.Valid)
+		assert.Equal(t, "ACME GMBH", res.Name)
+		assert.Empty(t, res.Address)
+		assert.Equal(t, vies.Source, res.Source)
+	})
+
+	t.Run("invalid TIN is not an error", func(t *testing.T) {
+		c := mockedClient(t, invalidBody)
+		res, err := c.LookupIdentity(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
+		require.NoError(t, err)
+		assert.False(t, res.Valid)
+	})
+
+	t.Run("nil identity", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		_, err := c.LookupIdentity(ctx, nil)
+		assert.ErrorIs(t, err, ErrInput)
+	})
+
+	t.Run("empty code", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		_, err := c.LookupIdentity(ctx, &tax.Identity{Country: "DE"})
+		assert.ErrorIs(t, err, ErrInput)
+	})
+
+	t.Run("unsupported country", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		_, err := c.LookupIdentity(ctx, &tax.Identity{Country: "US", Code: "123456789"})
+		assert.ErrorIs(t, err, ErrNotSupported)
+	})
+}
+
+func TestLookupParty(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("valid party", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		party := &org.Party{
+			Name:  "ACME GmbH",
+			TaxID: &tax.Identity{Country: "DE", Code: "282741168"},
+		}
+		res, err := c.LookupParty(ctx, party)
+		require.NoError(t, err)
+		assert.True(t, res.Valid)
+	})
+
+	t.Run("nil party", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		_, err := c.LookupParty(ctx, nil)
+		assert.ErrorIs(t, err, ErrInput)
+	})
+
+	t.Run("no tax ID", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		_, err := c.LookupParty(ctx, &org.Party{Name: "ACME GmbH"})
+		assert.ErrorIs(t, err, ErrInput)
+	})
+}
+
+func TestLookupInvoice(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("both parties valid", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		inv := loadInvoice(t, "test/data/invoice-valid.json")
+		res, err := c.LookupInvoice(ctx, inv, InvoicePartyBoth)
+		require.NoError(t, err)
+		require.NotNil(t, res.Customer)
+		require.NotNil(t, res.Supplier)
+		assert.True(t, res.Customer.Valid)
+		assert.True(t, res.Supplier.Valid)
+	})
+
+	t.Run("customer only", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		inv := loadInvoice(t, "test/data/invoice-valid.json")
+		res, err := c.LookupInvoice(ctx, inv, InvoicePartyCustomer)
+		require.NoError(t, err)
+		require.NotNil(t, res.Customer)
+		assert.Nil(t, res.Supplier)
+	})
+
+	t.Run("supplier only", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		inv := loadInvoice(t, "test/data/invoice-valid.json")
+		res, err := c.LookupInvoice(ctx, inv, InvoicePartySupplier)
+		require.NoError(t, err)
+		assert.Nil(t, res.Customer)
+		require.NotNil(t, res.Supplier)
+	})
+
+	t.Run("invalid TIN reported in result", func(t *testing.T) {
+		c := mockedClient(t, invalidBody)
+		inv := loadInvoice(t, "test/data/invoice-valid.json")
+		res, err := c.LookupInvoice(ctx, inv, InvoicePartyBoth)
+		require.NoError(t, err)
+		assert.False(t, res.Customer.Valid)
+		assert.False(t, res.Supplier.Valid)
+	})
+
+	t.Run("no customer", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		inv := loadInvoice(t, "test/data/invoice-no-customer.json")
+		_, err := c.LookupInvoice(ctx, inv, InvoicePartyCustomer)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrInput)
+		assert.Contains(t, err.Error(), "customer")
+	})
+
+	t.Run("no customer tax ID", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		inv := loadInvoice(t, "test/data/invoice-no-taxid.json")
+		_, err := c.LookupInvoice(ctx, inv, InvoicePartyBoth)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrInput)
+		assert.Contains(t, err.Error(), "customer")
+	})
+
+	t.Run("unsupported supplier country", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		inv := loadInvoice(t, "test/data/invoice-invalid-country.json")
+		_, err := c.LookupInvoice(ctx, inv, InvoicePartyBoth)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrNotSupported)
+		assert.Contains(t, err.Error(), "supplier")
+	})
+
+	t.Run("nil invoice", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		_, err := c.LookupInvoice(ctx, nil, InvoicePartyBoth)
+		assert.ErrorIs(t, err, ErrInput)
+	})
+
+	t.Run("unknown party selector", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		inv := loadInvoice(t, "test/data/invoice-valid.json")
+		_, err := c.LookupInvoice(ctx, inv, "everyone")
+		assert.ErrorIs(t, err, ErrInput)
+	})
 }
