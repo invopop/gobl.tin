@@ -20,16 +20,18 @@ var errInvalidTIN = errors.New("TIN is invalid")
 type lookupOpts struct {
 	*rootOpts
 	lookupType string
+
+	// client performs the lookups. Tests set a fake here; when nil, runE
+	// builds the real client.
+	client tinLookuper
 }
 
-// tinLookuper is the slice of tin.Client this command uses. It exists so that
-// tests can substitute a fake client instead of dialing the live registry.
+// tinLookuper is the subset of tin.Client methods this command uses. It
+// exists so that tests can substitute a fake client instead of dialing the
+// live registry.
 type tinLookuper interface {
 	LookupInvoice(ctx context.Context, inv *bill.Invoice, party tin.InvoiceParty) (*tin.InvoiceResult, error)
 }
-
-// newTinClient builds the lookup client. Tests replace it.
-var newTinClient = func() tinLookuper { return tin.New() }
 
 func lookup(o *rootOpts) *lookupOpts {
 	return &lookupOpts{rootOpts: o}
@@ -77,7 +79,12 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid type %T", env.Document)
 	}
 
-	res, err := newTinClient().LookupInvoice(cmd.Context(), inv, tin.InvoiceParty(c.lookupType))
+	client := c.client
+	if client == nil {
+		client = tin.New()
+	}
+
+	res, err := client.LookupInvoice(cmd.Context(), inv, tin.InvoiceParty(c.lookupType))
 	if err != nil {
 		return fmt.Errorf("looking up TIN: %w", err)
 	}

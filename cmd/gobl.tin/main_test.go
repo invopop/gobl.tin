@@ -26,14 +26,6 @@ func (f *fakeClient) LookupInvoice(_ context.Context, _ *bill.Invoice, party tin
 	return f.result(party)
 }
 
-// withFakeClient swaps the CLI's client for the duration of a test.
-func withFakeClient(t *testing.T, result func(party tin.InvoiceParty) (*tin.InvoiceResult, error)) {
-	t.Helper()
-	orig := newTinClient
-	newTinClient = func() tinLookuper { return &fakeClient{result: result} }
-	t.Cleanup(func() { newTinClient = orig })
-}
-
 // resultsFor builds an InvoiceResult with the given per-party results,
 // honouring the requested party selector like the real client does.
 func resultsFor(customer, supplier *tin.Result) func(tin.InvoiceParty) (*tin.InvoiceResult, error) {
@@ -115,15 +107,14 @@ func Test_root(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.result != nil {
-				withFakeClient(t, tt.result)
-			}
-
 			cmd := &cobra.Command{SilenceUsage: true, SilenceErrors: true}
 			rootOpts := &rootOpts{}
-			lookupCmd := lookup(rootOpts).cmd()
+			lo := lookup(rootOpts)
+			if tt.result != nil {
+				lo.client = &fakeClient{result: tt.result}
+			}
 
-			cmd.AddCommand(lookupCmd)
+			cmd.AddCommand(lo.cmd())
 			output := &bytes.Buffer{}
 			cmd.SetOut(output)
 			cmd.SetErr(output)
