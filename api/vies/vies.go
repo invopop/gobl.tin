@@ -128,6 +128,12 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 	if tid == nil {
 		return nil, api.ErrInput.WithMessage("no tax identity provided")
 	}
+	if tid.Country == "" {
+		return nil, api.ErrInput.WithMessage("no country code provided")
+	}
+	if tid.Code == "" {
+		return nil, api.ErrInput.WithMessage("no tax ID code provided")
+	}
 
 	reqBody := checkVatRequest{
 		CountryCode: tid.Country,

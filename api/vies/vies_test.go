@@ -199,12 +199,18 @@ func TestLookupTIN(t *testing.T) {
 		}
 	})
 
-	t.Run("nil identity is an input error", func(t *testing.T) {
-		a := serve(t, http.StatusOK, viesValidBody, nil)
-		res, err := a.LookupTIN(context.Background(), nil)
-		require.Error(t, err)
-		assert.Nil(t, res)
-		assert.ErrorIs(t, err, api.ErrInput)
+	t.Run("nil or incomplete identity is an input error", func(t *testing.T) {
+		for name, bad := range map[string]*tax.Identity{
+			"nil identity":  nil,
+			"empty country": {Code: "B85905495"},
+			"empty code":    {Country: "ES"},
+		} {
+			a := serve(t, http.StatusOK, viesValidBody, nil)
+			res, err := a.LookupTIN(context.Background(), bad)
+			require.Error(t, err, name)
+			assert.Nil(t, res, name)
+			assert.ErrorIs(t, err, api.ErrInput, name)
+		}
 	})
 
 	t.Run("rate limited with a huge Retry-After clamps", func(t *testing.T) {
