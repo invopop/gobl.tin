@@ -97,6 +97,9 @@ func (c *Client) LookupIdentity(ctx context.Context, tid *tax.Identity) (*Result
 	if tid.Code == "" {
 		return nil, ErrInput.WithMessage("no tax ID code provided")
 	}
+	if tid.Country == "" {
+		return nil, ErrInput.WithMessage("no country code provided")
+	}
 	registry := c.lookupAPIFor(tid.Country)
 	if registry == nil {
 		return nil, ErrNotSupported.WithMsgf("country code %q not supported", tid.Country)

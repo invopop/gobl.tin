@@ -253,7 +253,7 @@ func TestLookupTIN(t *testing.T) {
 	})
 
 	t.Run("invalid base URL fails at first call", func(t *testing.T) {
-		for _, bad := range []string{"not a url", "ftp://example.com", "https:foo", "https:///path"} {
+		for _, bad := range []string{"not a url", "ftp://example.com", "https:foo", "https:///path", "https://:443"} {
 			a := New(WithBaseURL(bad))
 			_, err := a.LookupTIN(context.Background(), tid)
 			require.Error(t, err, bad)

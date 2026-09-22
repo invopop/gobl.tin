@@ -72,6 +72,13 @@ func TestLookupIdentity(t *testing.T) {
 		assert.ErrorIs(t, err, ErrInput)
 	})
 
+	t.Run("empty country is an input error", func(t *testing.T) {
+		c := mockedClient(t, validBody)
+		_, err := c.LookupIdentity(ctx, &tax.Identity{Code: "282741168"})
+		assert.ErrorIs(t, err, ErrInput)
+		assert.NotErrorIs(t, err, ErrNotSupported)
+	})
+
 	t.Run("unsupported country", func(t *testing.T) {
 		c := mockedClient(t, validBody)
 		_, err := c.LookupIdentity(ctx, &tax.Identity{Country: "US", Code: "123456789"})
