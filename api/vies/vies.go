@@ -115,13 +115,13 @@ func statusError(resp *resty.Response) error {
 	code := resp.StatusCode()
 	msg := errorMessage(resp.Body(), code)
 
-	switch {
-	case code == http.StatusBadRequest:
+	switch code {
+	case http.StatusBadRequest:
 		// VIES answers 400 when the request itself is malformed, for example
 		// a number with symbols in it. That is a problem with the input, not
 		// with the network.
 		return api.ErrInput.WithMessage(msg)
-	case code == http.StatusTooManyRequests:
+	case http.StatusTooManyRequests:
 		return &api.RateLimitedError{RetryAfter: retryAfter(resp.Header())}
 	default:
 		return api.ErrNetwork.WithMessage(msg)
