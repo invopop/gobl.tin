@@ -186,6 +186,25 @@ func TestLookupTIN(t *testing.T) {
 		assert.Equal(t, defaultRetryAfter, rl.RetryAfter)
 	})
 
+	t.Run("missing validity field is not an answer", func(t *testing.T) {
+		for _, body := range []string{`{}`, `null`, `{"name": "ACME GMBH"}`} {
+			a := serve(t, http.StatusOK, body, nil)
+			res, err := a.LookupTIN(context.Background(), tid)
+			require.Error(t, err, body)
+			assert.Nil(t, res, body)
+			assert.ErrorIs(t, err, api.ErrNetwork, body)
+		}
+	})
+
+	t.Run("rate limited with a huge Retry-After clamps", func(t *testing.T) {
+		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"10000000000000000"}})
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		var rl *api.RateLimitedError
+		require.True(t, errors.As(err, &rl))
+		assert.Positive(t, rl.RetryAfter)
+	})
+
 	t.Run("malformed JSON on success status", func(t *testing.T) {
 		a := serve(t, http.StatusOK, `{"valid": tru`, nil)
 		_, err := a.LookupTIN(context.Background(), tid)

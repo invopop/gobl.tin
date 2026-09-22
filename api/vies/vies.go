@@ -5,6 +5,7 @@ package vies
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -109,9 +110,11 @@ type errorResponse struct {
 	Message string `json:"message"`
 }
 
-// checkVatResponse is the successful response from a VAT number check.
+// checkVatResponse is the successful response from a VAT number check. Valid
+// is a pointer so that an absent field is distinguishable from an explicit
+// false: a body without it is not an answer.
 type checkVatResponse struct {
-	Valid   bool   `json:"valid"`
+	Valid   *bool  `json:"valid"`
 	Name    string `json:"name"`
 	Address string `json:"address"`
 }
@@ -144,9 +147,12 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 	if err := json.Unmarshal(resp.Body(), &out); err != nil {
 		return nil, api.ErrNetwork.WithMessage("decoding response").WithCause(err)
 	}
+	if out.Valid == nil {
+		return nil, api.ErrNetwork.WithMessage("response carries no validity field")
+	}
 
 	return &api.Result{
-		Valid:   out.Valid,
+		Valid:   *out.Valid,
 		Name:    unmask(out.Name),
 		Address: unmask(out.Address),
 		Source:  Source,
@@ -200,8 +206,11 @@ func retryAfter(h http.Header) time.Duration {
 	if v == "" {
 		return defaultRetryAfter
 	}
-	if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
-		return time.Duration(secs) * time.Second
+	if secs, err := strconv.ParseInt(v, 10, 64); err == nil && secs >= 0 {
+		// Clamp before multiplying: a huge delay would overflow into a
+		// negative duration and cause an immediate requeue.
+		const maxSecs = int64(math.MaxInt64) / int64(time.Second)
+		return time.Duration(min(secs, maxSecs)) * time.Second
 	}
 	if t, err := http.ParseTime(v); err == nil {
 		return max(time.Until(t), 0)
