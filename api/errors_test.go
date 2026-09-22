@@ -38,6 +38,11 @@ func TestError(t *testing.T) {
 		assert.Equal(t, cause, errors.Unwrap(err))
 	})
 
+	t.Run("rate limited carries the 429 code", func(t *testing.T) {
+		err := &RateLimitedError{}
+		assert.Equal(t, "429", err.Code())
+	})
+
 	t.Run("errors.As finds the type", func(t *testing.T) {
 		var e *Error
 		wrapped := fmt.Errorf("supplier: %w", ErrServer.WithCode("500"))

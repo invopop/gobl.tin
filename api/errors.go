@@ -49,6 +49,13 @@ func (e *RateLimitedError) Error() string {
 	return "registry: rate limited, retry in " + e.RetryAfter.String()
 }
 
+// Code returns the HTTP status that produces this error, which is always 429.
+// It keeps the contract that errors originating from an HTTP response expose
+// their status through Code().
+func (e *RateLimitedError) Code() string {
+	return "429"
+}
+
 // Error contains the standard error definition for this domain.
 type Error struct {
 	key     string
