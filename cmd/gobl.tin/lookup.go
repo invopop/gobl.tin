@@ -18,6 +18,15 @@ type lookupOpts struct {
 	lookupType string
 }
 
+// tinLookuper is the slice of tin.Client this command uses. It exists so that
+// tests can substitute a fake client instead of dialing the live registry.
+type tinLookuper interface {
+	Lookup(ctx context.Context, in any) error
+}
+
+// newTinClient builds the lookup client. Tests replace it.
+var newTinClient = func() tinLookuper { return tin.New() }
+
 func lookup(o *rootOpts) *lookupOpts {
 	return &lookupOpts{rootOpts: o}
 }
@@ -66,7 +75,7 @@ func (c *lookupOpts) runE(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	client := tin.New()
+	client := newTinClient()
 
 	switch c.lookupType {
 	case "customer":

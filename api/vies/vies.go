@@ -12,10 +12,39 @@ import (
 	"github.com/invopop/gobl/tax"
 )
 
-const viesAPIURL = "https://ec.europa.eu/taxation_customs/vies/rest-api//check-vat-number"
+// DefaultBaseURL is the production VIES REST endpoint.
+const DefaultBaseURL = "https://ec.europa.eu/taxation_customs/vies/rest-api"
 
-// API is a struct that implements the VIES lookup and inherits from LookupAPI
-type API struct{}
+const checkVatPath = "/check-vat-number"
+
+// API implements the VIES lookup.
+type API struct {
+	baseURL string
+	conn    *resty.Client
+}
+
+// Option configures the API.
+type Option func(*API)
+
+// WithBaseURL points the API at a different endpoint. It exists so that tests
+// can run against a local server instead of the live VIES service.
+func WithBaseURL(url string) Option {
+	return func(a *API) {
+		a.baseURL = url
+	}
+}
+
+// New creates a new VIES API client.
+func New(opts ...Option) *API {
+	a := &API{
+		baseURL: DefaultBaseURL,
+	}
+	for _, opt := range opts {
+		opt(a)
+	}
+	a.conn = resty.New().SetBaseURL(a.baseURL)
+	return a
+}
 
 // CheckVatRequest is the request body for the VIES API
 type CheckVatRequest struct {
@@ -36,18 +65,17 @@ type CheckTINResponse struct {
 }
 
 // LookupTIN validates existence of VAT number in VIES database
-func (v API) LookupTIN(c context.Context, tid *tax.Identity) (bool, error) {
+func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (bool, error) {
 	reqBody := CheckVatRequest{
 		CountryCode: tid.Country,
 		VatNumber:   tid.Code,
 	}
 
-	client := resty.New()
-	resp, err := client.R().
-		SetContext(c).
+	resp, err := a.conn.R().
+		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(reqBody).
-		Post(viesAPIURL)
+		Post(checkVatPath)
 
 	if err != nil {
 		return false, err

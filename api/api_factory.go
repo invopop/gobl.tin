@@ -9,7 +9,7 @@ import (
 func GetLookupAPI(countryCode l10n.TaxCountryCode) LookupAPI {
 	switch {
 	case isEuropeanCountryCode(countryCode): // For the moment it only supports VIES lookup
-		return vies.API{}
+		return vies.New()
 	// Add cases for other countries and their specific validators
 	default:
 		return nil // nil in case we don't have a validator for the country code

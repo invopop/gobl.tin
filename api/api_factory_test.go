@@ -17,7 +17,7 @@ func TestGetTinLookup(t *testing.T) {
 		{
 			name:         "European Country Code",
 			countryCode:  "ES",
-			expectedType: reflect.TypeOf((*vies.API)(nil)).Elem(),
+			expectedType: reflect.TypeOf((*vies.API)(nil)),
 		},
 		{
 			name:         "Non-European Country Code",

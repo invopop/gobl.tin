@@ -6,6 +6,7 @@ import (
 
 	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl/bill"
+	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -14,12 +15,16 @@ import (
 // Client encapsulates the TIN lookup logic.
 type Client struct {
 	cache cmap.ConcurrentMap[string, bool]
+	// apiFor resolves the registry for a country. It defaults to the package
+	// factory and exists so that tests can point lookups at a local server.
+	apiFor func(l10n.TaxCountryCode) api.LookupAPI
 }
 
 // New creates a new Client instance.
 func New() *Client {
 	return &Client{
-		cache: cmap.New[bool](),
+		cache:  cmap.New[bool](),
+		apiFor: api.GetLookupAPI,
 	}
 }
 
@@ -56,7 +61,7 @@ func (c *Client) lookupTaxID(ctx context.Context, tid *tax.Identity) error {
 	key := tid.String()
 
 	if response, ok = c.cache.Get(key); !ok {
-		validator := api.GetLookupAPI(tid.Country)
+		validator := c.apiFor(tid.Country)
 		if validator == nil {
 			return ErrNotSupported.WithMessage("country code not supported")
 		}
