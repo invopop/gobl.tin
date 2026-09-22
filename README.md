@@ -15,12 +15,18 @@ The client holds no cache, so every call reaches the registry. Caching is the co
 Configure the client with options:
 
 ```go
+// Pass options through to the VIES client the Client builds.
 c := tin.New(
-	// Pass options through to the VIES client.
 	tin.WithVIESOptions(vies.WithTimeout(5*time.Second), vies.WithBaseURL(url)),
-	// Or replace the VIES registry entirely, for example with a fake in tests.
-	tin.WithVIES(myRegistry),
 )
+```
+
+Or replace the VIES registry entirely, for example with a fake in tests.
+`WithVIES` supplies the whole client, so `WithVIESOptions` has no effect
+when it is set:
+
+```go
+c := tin.New(tin.WithVIES(myRegistry))
 ```
 
 ```go

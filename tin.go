@@ -70,7 +70,8 @@ func WithVIESOptions(opts ...vies.Option) Option {
 }
 
 // WithVIES replaces the VIES registry client entirely. It exists so that
-// tests and consumers can inject their own implementation.
+// tests and consumers can inject their own implementation. When set,
+// WithVIESOptions has no effect: the injected client is used as given.
 func WithVIES(registry api.LookupAPI) Option {
 	return func(c *Client) {
 		c.vies = registry
