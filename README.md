@@ -8,7 +8,9 @@ Copyright [Invopop Ltd.](https://invopop.com) 2024. Released publicly under the 
 
 ### Go Package
 
-Usage of the GOBL TIN lookup library is pretty straight forward. You must first have a GOBL Envelope including an invoice ready to convert. There are some samples here in the test/data directory.
+A lookup returns a `Result`, never a bare yes/no error. An invalid TIN is an ordinary `Result` with `Valid` set to `false` and a `nil` error. Errors are reserved for cases where the registry could not answer.
+
+The client is stateless: it holds no cache, so every call reaches the registry. Caching is the consuming application's decision.
 
 ```go
 package main
@@ -20,12 +22,11 @@ import (
 	"os"
 
 	"github.com/invopop/gobl"
+	tin "github.com/invopop/gobl.tin"
 	"github.com/invopop/gobl/bill"
-	"github.com/invopop/gobl/gobl.tin"
 )
 
 func main() {
-
 	data, _ := os.ReadFile("test/data/invoice-valid.json")
 
 	env := new(gobl.Envelope)
@@ -35,52 +36,91 @@ func main() {
 
 	inv, ok := env.Extract().(*bill.Invoice)
 	if !ok {
-		fmt.Errorf("invalid type %T", env.Document)
+		panic(fmt.Errorf("invalid type %T", env.Document))
 	}
 
 	ctx := context.Background()
-	c := New()
+	c := tin.New()
 
-	// You can validate all the taxID in an invoice
-	err := c.Lookup(ctx, inv)
+	// Look up the parties of an invoice: "customer", "supplier" or "both".
+	res, err := c.LookupInvoice(ctx, inv, tin.InvoicePartyBoth)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("customer valid:", res.Customer.Valid)
+	fmt.Println("supplier valid:", res.Supplier.Valid)
 
-	// You can validate each party
-	err = c.Lookup(ctx, inv.Customer)
-	err = c.Lookup(ctx, inv.Supplier)
+	// Look up a single party.
+	pres, _ := c.LookupParty(ctx, inv.Customer)
+	fmt.Println(pres.Valid, pres.Name, pres.Source)
 
-	// And you can validate independent Tax IDs
-	err = c.Lookup(ctx, inv.Customer.TaxID)
+	// Look up an independent tax identity.
+	ires, _ := c.LookupIdentity(ctx, inv.Customer.TaxID)
+	fmt.Println(ires.Valid)
 }
-
 ```
+
+A `Result` carries:
+
+- `Valid`: whether the registry recognises the TIN.
+- `Name`: the name the registry holds for the party. Empty when the registry masks it, which some member states always do.
+- `Address`: the registered address as a single unstructured string. Empty when masked.
+- `Source`: the registry that answered, for example `"vies"`.
 
 ### Handling errors
 
-There are 4 type of errors when doing lookup:
-- ErrInvalid: Error when the lookup service determines invalid the TaxID: could be because of the format or because it wasn't found on the database.
-- ErrInput: An error when the input is missing data like the taxId or the party
-- ErrNotSupported: An error when the country is not supported by our service
-- ErrNetwork: An error from doing the request, could be a 404, 500. This error does not mean that the taxId is wrong but that the request couldn't be made.
+An invalid TIN is not an error. The error taxonomy covers only the cases where the registry could not answer:
+
+- `ErrInput`: the input is malformed or incomplete. A missing tax ID, an empty code, or a request the registry rejected as badly formed.
+- `ErrNotSupported`: no registry covers the country.
+- `ErrNetwork`: the request failed. A transport failure or a registry server error. It says nothing about the TIN.
+- `RateLimitedError`: the registry's request budget is exhausted. It carries a `RetryAfter` duration so the caller can requeue with a precise delay.
+
+Match the sentinels with `errors.Is` and `RateLimitedError` with `errors.As`:
 
 ```go
-err = c.Lookup(ctx, inv)
-
+res, err := c.LookupInvoice(ctx, inv, tin.InvoicePartyBoth)
 if err != nil {
-	if e, ok := err.(*Error); ok {
-		if e.Is(ErrInvalid) {
-			// Case where the taxId is invalid
-		} else if e.Is(ErrInput) {
-			// Case where something from the input is wrong/missing (taxId, party)
-		} else if e.Is(ErrNotSupported) {
-			// Case where the country code is not supported
-		} else if e.Is(ErrNetwork) {
-			// Case where there is a error with the network/request
-		}
+	var rl *tin.RateLimitedError
+	switch {
+	case errors.Is(err, tin.ErrInput):
+		// Something in the input is wrong or missing.
+	case errors.Is(err, tin.ErrNotSupported):
+		// The country code is not supported.
+	case errors.As(err, &rl):
+		// Retry after rl.RetryAfter.
+	case errors.Is(err, tin.ErrNetwork):
+		// The request could not be made or the registry failed.
 	}
+	return err
 }
-
+if !res.Customer.Valid {
+	// The registry does not recognise the customer's TIN.
+}
 ```
 
+### Applying results to a party
+
+`Result.ApplyTo` writes the registry's details back into a GOBL party. It is deliberately conservative: it fills an empty name, keeps a matching name with the user's own casing, and only overwrites a disagreeing name when `ApplyOptions.CorrectName` is set. A disagreement is always reported in `Changes.NameMismatch`. Name comparison folds case, punctuation and surrounding whitespace.
+
+Addresses are never applied: VIES returns the address as a single unstructured string, while GOBL addresses are structured, so applying it would mean guessing at a parse.
+
+```go
+res, err := c.LookupParty(ctx, inv.Customer)
+if err != nil {
+	return err
+}
+changes, err := res.ApplyTo(inv.Customer, tin.ApplyOptions{})
+if err != nil {
+	return err
+}
+if changes.Any() {
+	// The party changed and the document needs writing back.
+}
+if changes.NameMismatch {
+	// The party's name disagrees with the registry.
+}
+```
 
 ### Command Line
 
@@ -90,33 +130,26 @@ The GOBL TIN Lookup tool also includes a command line helper. You can install ma
 go install ./cmd/gobl.tin
 ```
 
-You can write the simple command, that will output a message regarding the TIN of the customer:
+The command prints one status line per requested party with the validity, the source registry, and the registered name when the registry disclosed one. It exits with code 0 when every requested TIN is valid, and non-zero on an invalid TIN or an error.
 
 ```bash
 gobl.tin lookup ./test/data/invoice-valid.json
 ```
 
-But you can also define the party you want to validate the TIN as an argument:
+By default the command checks the customer. Select the party with the `--type` flag:
 
 ```bash
 gobl.tin lookup --type customer ./test/data/invoice-valid.json
-```
-
-```bash
 gobl.tin lookup --type supplier ./test/data/invoice-valid.json
-```
-
-```bash
 gobl.tin lookup --type both ./test/data/invoice-valid.json
 ```
 
 ## Testing
 
-### testify
+Tests run offline. Registry responses are served by `httptest` servers, so no test dials the live VIES service. Run them with:
 
-The library uses testify for testing. To run the tests you can use the command:
-```
-go test
+```bash
+go test -race ./...
 ```
 
 ## Development
