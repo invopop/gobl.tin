@@ -223,11 +223,13 @@ func TestLookupTIN(t *testing.T) {
 	})
 
 	t.Run("invalid base URL fails at first call", func(t *testing.T) {
-		a := New(WithBaseURL("not a url"))
-		_, err := a.LookupTIN(context.Background(), tid)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrInput)
-		assert.Contains(t, err.Error(), "invalid base URL")
+		for _, bad := range []string{"not a url", "ftp://example.com", "https:foo", "https:///path"} {
+			a := New(WithBaseURL(bad))
+			_, err := a.LookupTIN(context.Background(), tid)
+			require.Error(t, err, bad)
+			assert.ErrorIs(t, err, api.ErrInput, bad)
+			assert.Contains(t, err.Error(), "invalid base URL", bad)
+		}
 	})
 
 	t.Run("network failure", func(t *testing.T) {

@@ -82,6 +82,8 @@ func New(opts ...Option) *API {
 		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q", a.baseURL).WithCause(err)
 	} else if u.Scheme != "http" && u.Scheme != "https" {
 		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q: scheme must be http or https", a.baseURL)
+	} else if u.Host == "" {
+		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q: missing host", a.baseURL)
 	}
 	a.conn = resty.New().
 		SetBaseURL(a.baseURL).
