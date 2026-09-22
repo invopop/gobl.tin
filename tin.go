@@ -17,6 +17,19 @@ import (
 // Valid false and a nil error, never an error.
 type Result = api.Result
 
+// ApplyOptions controls how much of a Result is written back into a party by
+// Result.ApplyTo.
+type ApplyOptions = api.ApplyOptions
+
+// Changes reports what Result.ApplyTo altered on a party.
+type Changes = api.Changes
+
+// NameMatches reports whether two names agree once case, punctuation and
+// surrounding whitespace are folded.
+func NameMatches(a, b string) bool {
+	return api.NameMatches(a, b)
+}
+
 // InvoiceParty selects which parties of an invoice to look up.
 type InvoiceParty string
 
