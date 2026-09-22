@@ -174,6 +174,24 @@ func TestLookupInvoice(t *testing.T) {
 		assert.Contains(t, err.Error(), "supplier")
 	})
 
+	t.Run("customer error stops before the supplier lookup", func(t *testing.T) {
+		var calls int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			calls++
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"message": "MS_UNAVAILABLE"}`))
+		}))
+		t.Cleanup(srv.Close)
+		c := New(WithVIESOptions(vies.WithBaseURL(srv.URL)))
+
+		inv := loadInvoice(t, "test/data/invoice-valid.json")
+		_, err := c.LookupInvoice(context.Background(), inv, InvoicePartyBoth)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "customer")
+		assert.Equal(t, 1, calls)
+	})
+
 	t.Run("nil invoice", func(t *testing.T) {
 		c := mockedClient(t, validBody)
 		_, err := c.LookupInvoice(ctx, nil, InvoicePartyBoth)

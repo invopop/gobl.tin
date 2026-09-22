@@ -40,7 +40,9 @@ type Changes struct {
 }
 
 // Any reports whether anything changed, and therefore whether the document
-// needs writing back.
+// needs writing back. It must OR every write-reporting field of Changes, so
+// extend it whenever Changes gains one; a field it misses makes callers skip
+// a write-back that did happen.
 func (c Changes) Any() bool {
 	return c.Name
 }
