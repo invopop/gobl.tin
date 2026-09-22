@@ -193,7 +193,18 @@ func TestLookupTIN(t *testing.T) {
 			require.Error(t, err, body)
 			assert.Nil(t, res, body)
 			assert.ErrorIs(t, err, api.ErrNetwork, body)
+			var e *api.Error
+			require.True(t, errors.As(err, &e), body)
+			assert.Equal(t, "200", e.Code(), body)
 		}
+	})
+
+	t.Run("nil identity is an input error", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesValidBody, nil)
+		res, err := a.LookupTIN(context.Background(), nil)
+		require.Error(t, err)
+		assert.Nil(t, res)
+		assert.ErrorIs(t, err, api.ErrInput)
 	})
 
 	t.Run("rate limited with a huge Retry-After clamps", func(t *testing.T) {

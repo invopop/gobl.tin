@@ -125,6 +125,9 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 	if a.initErr != nil {
 		return nil, a.initErr
 	}
+	if tid == nil {
+		return nil, api.ErrInput.WithMessage("no tax identity provided")
+	}
 
 	reqBody := checkVatRequest{
 		CountryCode: tid.Country,
@@ -143,12 +146,13 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 		return nil, statusError(resp)
 	}
 
+	status := strconv.Itoa(resp.StatusCode())
 	var out checkVatResponse
 	if err := json.Unmarshal(resp.Body(), &out); err != nil {
-		return nil, api.ErrNetwork.WithMessage("decoding response").WithCause(err)
+		return nil, api.ErrNetwork.WithCode(status).WithMessage("decoding response").WithCause(err)
 	}
 	if out.Valid == nil {
-		return nil, api.ErrNetwork.WithMessage("response carries no validity field")
+		return nil, api.ErrNetwork.WithCode(status).WithMessage("response carries no validity field")
 	}
 
 	return &api.Result{
