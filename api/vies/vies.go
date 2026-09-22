@@ -175,12 +175,19 @@ func errorMessage(body []byte) string {
 }
 
 // retryAfter works out how long to wait before retrying, preferring the
-// standard Retry-After header and falling back to a fixed default.
+// standard Retry-After header and falling back to a fixed default. The
+// header grammar allows both delay seconds (including zero) and an
+// HTTP-date; a date in the past clamps to zero.
 func retryAfter(h http.Header) time.Duration {
-	if v := h.Get("Retry-After"); v != "" {
-		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
-			return time.Duration(secs) * time.Second
-		}
+	v := h.Get("Retry-After")
+	if v == "" {
+		return defaultRetryAfter
+	}
+	if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		return max(time.Until(t), 0)
 	}
 	return defaultRetryAfter
 }

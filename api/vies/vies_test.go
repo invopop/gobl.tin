@@ -147,6 +147,36 @@ func TestLookupTIN(t *testing.T) {
 		assert.Equal(t, 30*time.Second, rl.RetryAfter)
 	})
 
+	t.Run("rate limited with Retry-After zero", func(t *testing.T) {
+		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"0"}})
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		var rl *api.RateLimitedError
+		require.True(t, errors.As(err, &rl))
+		assert.Equal(t, time.Duration(0), rl.RetryAfter)
+	})
+
+	t.Run("rate limited with Retry-After HTTP date", func(t *testing.T) {
+		when := time.Now().Add(90 * time.Second).UTC().Format(http.TimeFormat)
+		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {when}})
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		var rl *api.RateLimitedError
+		require.True(t, errors.As(err, &rl))
+		assert.Greater(t, rl.RetryAfter, 60*time.Second)
+		assert.LessOrEqual(t, rl.RetryAfter, 90*time.Second)
+	})
+
+	t.Run("rate limited with Retry-After date in the past", func(t *testing.T) {
+		when := time.Now().Add(-time.Hour).UTC().Format(http.TimeFormat)
+		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {when}})
+		_, err := a.LookupTIN(context.Background(), tid)
+		require.Error(t, err)
+		var rl *api.RateLimitedError
+		require.True(t, errors.As(err, &rl))
+		assert.Equal(t, time.Duration(0), rl.RetryAfter)
+	})
+
 	t.Run("rate limited without Retry-After", func(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, nil)
 		_, err := a.LookupTIN(context.Background(), tid)
