@@ -112,11 +112,14 @@ type errorResponse struct {
 
 // checkVatResponse is the successful response from a VAT number check. Valid
 // is a pointer so that an absent field is distinguishable from an explicit
-// false: a body without it is not an answer.
+// false: a body without it is not an answer. The address is ignored: VIES
+// returns it as one unstructured string, which cannot honestly become a
+// structured GOBL address.
 type checkVatResponse struct {
-	Valid   *bool  `json:"valid"`
-	Name    string `json:"name"`
-	Address string `json:"address"`
+	Valid       *bool               `json:"valid"`
+	Name        string              `json:"name"`
+	CountryCode l10n.TaxCountryCode `json:"countryCode"`
+	VatNumber   cbc.Code            `json:"vatNumber"`
 }
 
 // LookupTIN checks the VAT number against VIES. An unregistered number is a
@@ -162,11 +165,24 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 	}
 
 	return &api.Result{
-		Valid:   *out.Valid,
-		Name:    unmask(out.Name),
-		Address: unmask(out.Address),
-		Source:  Source,
+		Valid:  *out.Valid,
+		Source: Source,
+		TaxID:  confirmedTaxID(tid, &out),
+		Name:   unmask(out.Name),
 	}, nil
+}
+
+// confirmedTaxID builds the tax identity as VIES confirmed it, preferring the
+// response's echo of country and number and falling back to the request.
+func confirmedTaxID(req *tax.Identity, resp *checkVatResponse) *tax.Identity {
+	out := &tax.Identity{Country: resp.CountryCode, Code: resp.VatNumber}
+	if out.Country == "" {
+		out.Country = req.Country
+	}
+	if out.Code == "" {
+		out.Code = req.Code
+	}
+	return out
 }
 
 // statusError maps a non-2xx response onto the api error taxonomy.

@@ -21,6 +21,17 @@ type Result = api.Result
 // Result.ApplyTo.
 type ApplyOptions = api.ApplyOptions
 
+// AddressPolicy controls whether a result's registered address is written
+// into a party by Result.ApplyTo.
+type AddressPolicy = api.AddressPolicy
+
+// Address policies for ApplyOptions.
+const (
+	AddressPolicyNone    = api.AddressPolicyNone
+	AddressPolicyAppend  = api.AddressPolicyAppend
+	AddressPolicyReplace = api.AddressPolicyReplace
+)
+
 // Changes reports what Result.ApplyTo altered on a party.
 type Changes = api.Changes
 

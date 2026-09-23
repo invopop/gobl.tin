@@ -93,7 +93,19 @@ func TestLookupTIN(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, res.Valid)
 		assert.Equal(t, "ACME GMBH", res.Name)
-		assert.Equal(t, "MUSTERSTR. 1, 10115 BERLIN", res.Address)
+		assert.Nil(t, res.Address, "VIES has no structured address")
+		require.NotNil(t, res.TaxID)
+		assert.Equal(t, "DE", res.TaxID.Country.String(), "echoed by the response")
+		assert.Equal(t, "282741168", res.TaxID.Code.String())
+	})
+
+	t.Run("missing echo falls back to the request identity", func(t *testing.T) {
+		a := serve(t, http.StatusOK, `{"valid": true, "name": "ACME GMBH"}`, nil)
+		res, err := a.LookupTIN(context.Background(), tid)
+		require.NoError(t, err)
+		require.NotNil(t, res.TaxID)
+		assert.Equal(t, tid.Country, res.TaxID.Country)
+		assert.Equal(t, tid.Code, res.TaxID.Code)
 	})
 
 	t.Run("invalid number is not an error", func(t *testing.T) {

@@ -87,12 +87,14 @@ Coverage is queryable without performing a lookup: `tin.Supported(country)`
 reports whether a registry covers the country, and `tin.Countries()` lists
 every covered tax country code.
 
-A `Result` carries:
+A `Result` speaks GOBL types and carries:
 
 - `Valid`: whether the registry recognises the TIN.
-- `Name`: the name the registry holds for the party. Empty when the registry masks it, which some member states always do.
-- `Address`: the registered address as a single unstructured string. Empty when masked.
 - `Source`: the registry that answered, for example `"vies"`.
+- `TaxID`: the `tax.Identity` as the registry confirmed it.
+- `Name`: the name the registry holds for the party. Empty when the registry masks it, which some member states always do.
+- `Identities`: registry identifiers that are not tax IDs, as `org.Identity`. Empty for VIES.
+- `Address`: the registered address as an `org.Address`, when the registry provides structure. VIES returns only an unstructured string, so it leaves this nil.
 
 ### Handling errors
 
@@ -131,9 +133,12 @@ if !res.Customer.Valid {
 
 ### Applying results to a party
 
-`Result.ApplyTo` writes the registry's details back into a GOBL party. It is deliberately conservative: it fills an empty name, keeps a matching name with the user's own casing, and only overwrites a disagreeing name when `ApplyOptions.CorrectName` is set. A disagreement is always reported in `Changes.NameMismatch`. Name comparison folds case, punctuation and surrounding whitespace.
+`Result.ApplyTo` writes the registry's details back into a GOBL party. It is deliberately conservative: it fills gaps and reports disagreements, and never resolves a conflict by overwriting.
 
-Addresses are never applied: VIES returns the address as a single unstructured string, while GOBL addresses are structured, so applying it would mean guessing at a parse.
+- Name: fills an empty name; keeps a matching name with the user's own casing; overwrites a disagreeing name only when `ApplyOptions.CorrectName` is set. A disagreement is always reported in `Changes.NameMismatch`. Comparison folds case, punctuation and surrounding whitespace.
+- Tax identity: fills an absent `party.TaxID`; a different one is reported in `Changes.TaxIDConflict` and left alone.
+- Identities: appended when the party does not carry them; idempotent on re-runs. A same-type identity with a different code is reported in `Changes.IdentityConflict` and left alone.
+- Address: written only under `ApplyOptions.Address` (`append` or `replace`; the default leaves addresses untouched) and only when the result has a structured address. VIES never does, so lookups through VIES never touch addresses.
 
 ```go
 res, err := c.LookupParty(ctx, inv.Customer)
