@@ -38,6 +38,30 @@ const (
 	StatusUnverified  = api.StatusUnverified
 )
 
+// Policy decides what Verification.Patch may write.
+type Policy = api.Policy
+
+// NamePolicy decides when the register's name is written.
+type NamePolicy = api.NamePolicy
+
+// IdentitiesPolicy decides when the register's identities are written.
+type IdentitiesPolicy = api.IdentitiesPolicy
+
+// AddressPolicy decides when the register's addresses are written.
+type AddressPolicy = api.AddressPolicy
+
+// Policy values.
+const (
+	NamePolicyFill             = api.NamePolicyFill
+	NamePolicyPreferRegister   = api.NamePolicyPreferRegister
+	NamePolicyKeep             = api.NamePolicyKeep
+	IdentitiesPolicyAddMissing = api.IdentitiesPolicyAddMissing
+	IdentitiesPolicyKeep       = api.IdentitiesPolicyKeep
+	AddressPolicyNone          = api.AddressPolicyNone
+	AddressPolicyAppend        = api.AddressPolicyAppend
+	AddressPolicyReplace       = api.AddressPolicyReplace
+)
+
 // NameMatches reports whether two names agree once case, punctuation and
 // surrounding whitespace are folded.
 func NameMatches(a, b string) bool {
