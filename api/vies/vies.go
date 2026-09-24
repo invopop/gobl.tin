@@ -41,6 +41,14 @@ const checkVatPath = "/check-vat-number"
 // header. VIES does not document its limits, so this is a polite guess.
 const defaultRetryAfter = time.Minute
 
+// countryCodes lists the tax country codes VIES covers. VIES uses EL for
+// Greece and XI for Northern Ireland.
+var countryCodes = []l10n.Code{
+	l10n.AT, l10n.BE, l10n.BG, l10n.CY, l10n.CZ, l10n.DE, l10n.DK, l10n.EE, l10n.EL, l10n.ES,
+	l10n.FI, l10n.FR, l10n.HR, l10n.HU, l10n.IE, l10n.IT, l10n.LT, l10n.LU, l10n.LV, l10n.MT,
+	l10n.NL, l10n.PL, l10n.PT, l10n.RO, l10n.SE, l10n.SI, l10n.SK, l10n.XI,
+}
+
 // API implements the VIES lookup.
 type API struct {
 	baseURL string
@@ -125,22 +133,71 @@ type checkVatResponse struct {
 // LookupTIN checks the VAT number against VIES. An unregistered number is a
 // Result with Valid false, not an error.
 func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, error) {
-	if a.initErr != nil {
-		return nil, a.initErr
-	}
 	if tid == nil {
 		return nil, api.ErrInput.WithMessage("no tax identity provided")
 	}
-	if tid.Country == "" {
+	out, err := a.checkVat(ctx, tid.Country, tid.Code)
+	if err != nil {
+		return nil, err
+	}
+	return &api.Result{
+		Valid:  *out.Valid,
+		Source: Source,
+		TaxID:  confirmedTaxID(tid.Country, tid.Code, out),
+		Name:   unmask(out.Name),
+	}, nil
+}
+
+// Source names VIES as the register.
+func (a *API) Source() cbc.Key {
+	return Source
+}
+
+// Supports reports whether the identifier is a tax identity of a country
+// that VIES covers.
+func (a *API) Supports(id api.Identifier) bool {
+	return id.Type == "" && id.Key == "" && id.Country.Code().In(countryCodes...)
+}
+
+// Verify checks the identifier against VIES. An unregistered number is a
+// Check with StatusInvalid, not an error.
+func (a *API) Verify(ctx context.Context, id api.Identifier) (*api.Check, error) {
+	out, err := a.checkVat(ctx, id.Country, id.Code)
+	if err != nil {
+		return nil, err
+	}
+	check := &api.Check{
+		Path:      id.Path,
+		TaxID:     confirmedTaxID(id.Country, id.Code, out),
+		Status:    api.StatusInvalid,
+		Source:    Source,
+		CheckedAt: time.Now().UTC(),
+	}
+	if *out.Valid {
+		check.Status = api.StatusValid
+	}
+	if name := unmask(out.Name); name != "" {
+		check.Record = &api.Record{Name: name}
+	}
+	return check, nil
+}
+
+// checkVat posts the number to VIES and decodes the answer. The response
+// always carries a validity field on return.
+func (a *API) checkVat(ctx context.Context, country l10n.TaxCountryCode, code cbc.Code) (*checkVatResponse, error) {
+	if a.initErr != nil {
+		return nil, a.initErr
+	}
+	if country == "" {
 		return nil, api.ErrInput.WithMessage("no country code provided")
 	}
-	if tid.Code == "" {
+	if code == "" {
 		return nil, api.ErrInput.WithMessage("no tax ID code provided")
 	}
 
 	reqBody := checkVatRequest{
-		CountryCode: tid.Country,
-		VatNumber:   tid.Code,
+		CountryCode: country,
+		VatNumber:   code,
 	}
 
 	resp, err := a.conn.R().
@@ -156,31 +213,25 @@ func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, er
 	}
 
 	status := strconv.Itoa(resp.StatusCode())
-	var out checkVatResponse
-	if err := json.Unmarshal(resp.Body(), &out); err != nil {
+	out := new(checkVatResponse)
+	if err := json.Unmarshal(resp.Body(), out); err != nil {
 		return nil, api.ErrNetwork.WithCode(status).WithMessage("decoding response").WithCause(err)
 	}
 	if out.Valid == nil {
 		return nil, api.ErrNetwork.WithCode(status).WithMessage("response carries no validity field")
 	}
-
-	return &api.Result{
-		Valid:  *out.Valid,
-		Source: Source,
-		TaxID:  confirmedTaxID(tid, &out),
-		Name:   unmask(out.Name),
-	}, nil
+	return out, nil
 }
 
 // confirmedTaxID builds the tax identity as VIES confirmed it, preferring the
 // response's echo of country and number and falling back to the request.
-func confirmedTaxID(req *tax.Identity, resp *checkVatResponse) *tax.Identity {
+func confirmedTaxID(country l10n.TaxCountryCode, code cbc.Code, resp *checkVatResponse) *tax.Identity {
 	out := &tax.Identity{Country: resp.CountryCode, Code: resp.VatNumber}
 	if out.Country == "" {
-		out.Country = req.Country
+		out.Country = country
 	}
 	if out.Code == "" {
-		out.Code = req.Code
+		out.Code = code
 	}
 	return out
 }

@@ -308,3 +308,89 @@ func TestNew(t *testing.T) {
 		require.NotNil(t, a.HTTPClient())
 	})
 }
+
+func TestVerifier(t *testing.T) {
+	id := api.Identifier{Path: api.PathTaxID, Country: "DE", Code: "282741168"}
+
+	t.Run("source", func(t *testing.T) {
+		assert.Equal(t, Source, New().Source())
+	})
+
+	t.Run("supports EU tax identities only", func(t *testing.T) {
+		a := New()
+		assert.True(t, a.Supports(api.Identifier{Country: "ES", Code: "B85905495"}))
+		assert.True(t, a.Supports(api.Identifier{Country: "EL", Code: "123456789"}), "VIES uses EL for Greece")
+		assert.True(t, a.Supports(api.Identifier{Country: "XI", Code: "123456789"}), "VIES covers Northern Ireland as XI")
+		assert.False(t, a.Supports(api.Identifier{Country: "GB", Code: "123456789"}), "GB proper is not covered")
+		assert.False(t, a.Supports(api.Identifier{Country: "US", Code: "123456789"}))
+		assert.False(t, a.Supports(api.Identifier{Code: "123456789"}))
+		assert.False(t, a.Supports(api.Identifier{Country: "DE", Type: "HRB", Code: "12345"}), "org identities are not tax identities")
+		assert.False(t, a.Supports(api.Identifier{Country: "DE", Key: "other", Code: "12345"}))
+	})
+
+	t.Run("valid with disclosed name", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesValidNamedBody, nil)
+		before := time.Now().Add(-time.Second)
+		check, err := a.Verify(context.Background(), id)
+		require.NoError(t, err)
+		assert.Equal(t, api.PathTaxID, check.Path)
+		assert.Equal(t, api.StatusValid, check.Status)
+		assert.Equal(t, Source, check.Source)
+		assert.True(t, check.CheckedAt.After(before))
+		require.NotNil(t, check.Record)
+		assert.Equal(t, "ACME GMBH", check.Record.Name)
+		require.NotNil(t, check.TaxID)
+		assert.Equal(t, "DE", check.TaxID.Country.String())
+		assert.Equal(t, "282741168", check.TaxID.Code.String())
+		assert.Empty(t, check.Mismatches, "verifiers do not compute mismatches")
+	})
+
+	t.Run("valid with masked name has no record", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesValidBody, nil)
+		check, err := a.Verify(context.Background(), id)
+		require.NoError(t, err)
+		assert.Equal(t, api.StatusValid, check.Status)
+		assert.Nil(t, check.Record)
+	})
+
+	t.Run("invalid number is a check, not an error", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesInvalidBody, nil)
+		check, err := a.Verify(context.Background(), id)
+		require.NoError(t, err)
+		assert.Equal(t, api.StatusInvalid, check.Status)
+		assert.Nil(t, check.Record)
+	})
+
+	t.Run("register failures are errors", func(t *testing.T) {
+		a := serve(t, http.StatusInternalServerError, `{"message": "MS_UNAVAILABLE"}`, nil)
+		check, err := a.Verify(context.Background(), id)
+		require.Error(t, err)
+		assert.Nil(t, check)
+		assert.ErrorIs(t, err, api.ErrServer)
+	})
+
+	t.Run("bad request is an input error", func(t *testing.T) {
+		a := serve(t, http.StatusBadRequest, `{"message": "Invalid VAT number format"}`, nil)
+		_, err := a.Verify(context.Background(), id)
+		assert.ErrorIs(t, err, api.ErrInput)
+	})
+
+	t.Run("rate limited", func(t *testing.T) {
+		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"30"}})
+		_, err := a.Verify(context.Background(), id)
+		var rl *api.RateLimitedError
+		require.True(t, errors.As(err, &rl))
+		assert.Equal(t, 30*time.Second, rl.RetryAfter)
+	})
+
+	t.Run("incomplete identifier is an input error", func(t *testing.T) {
+		a := serve(t, http.StatusOK, viesValidBody, nil)
+		for name, bad := range map[string]api.Identifier{
+			"empty country": {Code: "B85905495"},
+			"empty code":    {Country: "ES"},
+		} {
+			_, err := a.Verify(context.Background(), bad)
+			assert.ErrorIs(t, err, api.ErrInput, name)
+		}
+	})
+}
