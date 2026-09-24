@@ -143,7 +143,7 @@ func NewVerification(party *org.Party) *Verification {
 
 // Valid reports whether every check that a verifier answered is valid. A
 // report with an unverified check is not valid. A report where no verifier
-// covered any identifier is not valid either: nothing was verified.
+// covered any identifier is not valid either: no identifier is verified.
 func (v *Verification) Valid() bool {
 	if v == nil {
 		return false

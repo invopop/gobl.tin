@@ -24,7 +24,7 @@ var (
 	ErrNotSupported = NewError("not-supported")
 
 	// ErrNetwork wraps transport failures: dial errors, timeouts, and
-	// responses that could not be decoded. It says nothing about the TIN,
+	// responses that could not be decoded. It says nothing about the identifier,
 	// only that the request failed.
 	ErrNetwork = NewError("network")
 
@@ -47,7 +47,7 @@ type RateLimitedError struct {
 
 // Error provides the string representation of the error.
 func (e *RateLimitedError) Error() string {
-	return "registry: rate limited, retry in " + e.RetryAfter.String()
+	return "register: rate limited, retry in " + e.RetryAfter.String()
 }
 
 // Code returns the HTTP status that produces this error, which is always 429.

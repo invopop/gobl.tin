@@ -227,13 +227,13 @@ func statusError(resp *resty.Response) error {
 	case http.StatusBadRequest:
 		// VIES answers 400 when the request itself is malformed, for example
 		// a number with symbols in it. That is a problem with the input, not
-		// with the registry.
+		// with the register.
 		return api.ErrInput.WithCode(status).WithMessage(msg)
 	case http.StatusTooManyRequests:
 		return &api.RateLimitedError{RetryAfter: retryAfter(resp.Header())}
 	default:
 		// VIES has no auth and no per-resource statuses, so everything else,
-		// including edge responses such as 403, is the registry failing to
+		// including edge responses such as 403, is the register failing to
 		// answer.
 		return api.ErrServer.WithCode(status).WithMessage(msg)
 	}
