@@ -2,16 +2,16 @@
 
 Verify the identifiers of GOBL parties against the registers that issue them, read what the register holds, and patch the party.
 
-Copyright [Invopop Ltd.](https://invopop.com) 2024. Released publicly under the [Apache License Version 2.0](LICENSE). For commercial licenses please contact the [dev team at invopop](mailto:dev@invopop.com). In order to accept contributions to this library we will require transferring copyrights to Invopop Ltd.
+Copyright [Invopop Ltd.](https://invopop.com) 2026. Released publicly under the [Apache License Version 2.0](LICENSE). For commercial licenses please contact the [dev team at invopop](mailto:dev@invopop.com). In order to accept contributions to this library we will require transferring copyrights to Invopop Ltd.
 
 ## Vocabulary
 
 - A **party** is a GOBL `org.Party`.
 - An **identifier** is the party's `tax_id` or one entry of its `identities`.
-- A **verifier** is one register client. VIES is the built-in verifier.
+- A **verifier** is one register client. `vies.New()` is the built-in verifier.
 - A **register** is the external authority a verifier asks, for example VIES.
 - A **check** is the outcome for one identifier.
-- A **report** is the `Verification` for one party: one check per identifier.
+- A **report** is the `Report` for one party: one check per identifier.
 - A **record** is what the register holds for an identifier.
 - A **mismatch** is one field where the party disagrees with the record.
 - A **policy** decides what a **patch** may write back into the party.
@@ -20,7 +20,7 @@ Copyright [Invopop Ltd.](https://invopop.com) 2024. Released publicly under the 
 
 ### Verify a party
 
-`Client.Verify` walks the identifiers of a party, the `tax_id` first and then each identity in order, and runs the first verifier that supports each one. It returns an error only for a nil party. Everything the registers say, including a register that cannot answer, is in the report.
+`tin.New` takes an ordered list of verifiers. For each identifier of a party, the `tax_id` first and then each identity in order, the first verifier that supports it answers. `Client.Verify` returns an error only for a nil party. Everything the registers say, including a register that cannot answer, is in the report.
 
 ```go
 package main
@@ -30,6 +30,7 @@ import (
 	"fmt"
 
 	tin "github.com/invopop/gobl.tin"
+	"github.com/invopop/gobl.tin/vies"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 )
@@ -43,7 +44,7 @@ func main() {
 		},
 	}
 
-	c := tin.New()
+	c := tin.New(vies.New())
 	report, err := c.Verify(context.Background(), party)
 	if err != nil {
 		panic(err)
@@ -59,46 +60,49 @@ func main() {
 }
 ```
 
-The client holds no cache, so every call reaches the register. Caching is the consuming application's decision. Verifiers are built once per `Client` and reused, so checks share connections. VIES requests time out after 15 seconds by default.
+A client with no verifiers, `tin.New()`, is valid and marks every identifier `unsupported`. Nil verifiers are skipped. Two verifiers may share a `Source`; argument order still decides which one answers.
 
-Single identifiers have their own methods. Both return a check; an identifier that no verifier covers is a check with status `unsupported`, not an error:
+The client holds no cache, so every call reaches the register. Caching is the consuming application's decision. The client is safe for concurrent use when its verifiers are. VIES requests time out after 15 seconds by default.
+
+Single identifiers have their own methods. Both return a check with an empty `Path`, because there is no party document to point into. An identifier that no verifier covers is a check with status `unsupported`, not an error:
 
 ```go
 check, err := c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
 check, err := c.VerifyIdentity(ctx, &org.Identity{Country: "GB", Type: "CRN", Code: "00445790"})
 ```
 
-Coverage is queryable without a request. Both functions consult the default verifier set:
+Coverage is queryable without a request, over the client's verifiers:
 
 ```go
-tin.SupportsTaxID(&tax.Identity{Country: "ES", Code: "B85905495"}) // true
-tin.SupportsIdentity(&org.Identity{Country: "DE", Type: "HRB", Code: "12345"}) // false
+c.SupportsTaxID(&tax.Identity{Country: "ES", Code: "B85905495"})            // true with VIES
+c.SupportsIdentity(&org.Identity{Country: "DE", Type: "HRB", Code: "12345"}) // false with VIES
 ```
 
-### Configure the client
+### Configure VIES
 
 ```go
-// Pass options through to the VIES verifier the Client builds.
-c := tin.New(
-	tin.WithVIESOptions(vies.WithTimeout(5*time.Second), vies.WithBaseURL(url)),
-)
-
-// Add a verifier. One with the same Source as a built-in verifier takes its
-// place; any other is appended after the default set.
-c := tin.New(tin.WithVerifier(myVerifier))
+c := tin.New(vies.New(
+	vies.WithTimeout(5*time.Second),
+	vies.WithBaseURL(url),
+	vies.WithHTTPClient(httpClient),
+))
 ```
 
-A verifier implements `api.Verifier`:
+### Write a verifier
+
+A verifier implements `tin.Verifier`:
 
 ```go
 type Verifier interface {
 	Source() cbc.Key
 	Supports(id Identifier) bool
-	Verify(ctx context.Context, id Identifier) (*Check, error)
+	Verify(ctx context.Context, id Identifier) (*Answer, error)
 }
 ```
 
-`Identifier` is the input a verifier receives: the path of the identifier in the party, its country, key, type and normalized code. Consumers never construct one; the client builds them from GOBL types. A verifier returns an error only when the register cannot answer. An invalid identifier is a check with status `invalid` and a nil error. Verifiers do not compute mismatches; the client does, because a verifier sees one identifier and the comparison needs the whole party.
+`Identifier` is the input a verifier receives: the path of the identifier in the party, whether it is the tax identity, its country, key, type and normalized code. Consumers never construct one; the client builds them from GOBL types.
+
+`Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. An answer with an empty status makes the check `unverified`.
 
 ## Report
 
@@ -108,25 +112,29 @@ A report has one check per identifier, in document order. A check carries:
 - `tax_id` or `identity`: the normalized identifier. For a `tax_id` check, VIES sets it to the identity the register echoes.
 - `status`: `valid`, `invalid`, `unsupported` or `unverified`.
 - `source`: the verifier that answered, for example `vies`. Empty when unsupported.
-- `checked_at`: when the register answered. Absent when unsupported.
+- `checked_at`: when the register answered. Absent when unsupported or unverified.
 - `record`: what the register holds, when disclosed. VIES discloses the name for most member states; some always mask it.
-- `mismatches`: fields where the party disagrees with the record. Each carries a typed `field` (`name`, `tax_id`, `identity` or `address`), the JSON Pointer `path` of the value (`/name`, `/tax_id/code`, `/identities/N/code`), the `document` value and the `register` value. The client compares the name with `NameMatches`, which folds case, punctuation and whitespace, and compares identifiers by normalized code.
+- `mismatches`: fields where the party disagrees with the record. Each carries a typed `field` (`name`, `tax_id` or `identity`), the JSON Pointer `path` of the value (`/name`, `/tax_id/code`, `/tax_id/country`, `/identities/N/code`), the `document` value and the `register` value. The client compares the name with `NameMatches`, which folds case, punctuation and whitespace, and compares identifiers by normalized code.
+- `failure`: the register failure message, only when the status is `unverified`. The Go error is available through `Check.Err()`.
 
-Every path in a report is a JSON Pointer relative to the party document. Go consumers match on the typed values, `Check.TaxID`, `Check.Identity` and `Mismatch.Field`, rather than parsing paths; the pointer is for JSON consumers and for locating a value within an array.
-- `error`: the register failure message, only when the status is `unverified`. The Go error is available through `Check.Err()`.
+Every path is a JSON Pointer relative to the party document. A consumer that patches an invoice prefixes the party's location, `/customer` or `/supplier`. Go consumers match on the typed values, `Check.TaxID`, `Check.Identity` and `Mismatch.Field`, rather than parsing paths; the pointer is for JSON consumers and for locating a value within an array.
 
 ```json
 {"checks":[{"path":"/tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"field":"name","path":"/name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},{"path":"/identities/0","identity":{"country":"DE","type":"HRB","code":"12345"},"status":"unsupported"}]}
 ```
 
-`Verification.Valid()` is true when every check that a verifier answered is `valid`. A report with an `invalid` or `unverified` check is not valid. A report where every check is `unsupported` is not valid either: no identifier is verified.
+`Report.Valid()` is true when every check that a verifier answered is `valid`. A report with an `invalid` or `unverified` check is not valid. A report where every check is `unsupported` is not valid either: no identifier is verified.
+
+### Record status
+
+`Record.Status` is the standing of the party in its register: `active`, `inactive` or `dissolved`. Verifiers map register values onto this vocabulary and leave it empty for values they do not know. It does not change the check status: a recognised but dissolved company is `valid` with `Record.Status` `dissolved`, and the consumer decides. VIES has no standing and leaves it empty.
 
 ## Patch and Policy
 
-`Verification.Patch(policy)` builds an [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON merge patch on the party. It contains only what the policy permits. A patch with nothing to write is `{}`. A report built by hand, without a party, cannot produce a patch and returns `ErrInput`.
+`tin.Patch(party, report, policy)` builds an [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON merge patch on the party. It contains only what the policy permits. A patch with nothing to write is `{}`. A nil party or report is `ErrInput`.
 
 ```go
-patch, err := report.Patch(tin.Policy{
+patch, err := tin.Patch(party, report, tin.Policy{
 	Name:       tin.NamePolicyPreferRegister,
 	Identities: tin.IdentitiesPolicyAddMissing,
 	Addresses:  tin.AddressPolicyAppend,
@@ -136,18 +144,20 @@ patch, err := report.Patch(tin.Policy{
 
 Records are read in report order. The first valid record that has a value for a field wins. Records behind `invalid`, `unverified` or `unsupported` checks are never read.
 
+Every policy field has a named default, and the empty string is an alias for it, so the zero `Policy` is safe.
+
 | Field | Policy | Default | Effect |
 | --- | --- | --- | --- |
 | Name | `fill` | yes | Writes the register's name only when the party has none. Registers store names upper cased and with the full legal form, so a rewrite would touch every party. |
 | Name | `prefer-register` | | Writes the register's name whenever the register has one and it differs from the party's, including a difference of case or punctuation only. |
 | Name | `keep` | | Never writes the name. |
-| Identities | `add-missing` | yes | Appends record identities of a country, key and type the party lacks. An identity of the same kind with a different code is a conflict and is never written. |
+| Identities | `add-missing` | yes | Appends record identities of a kind (country, type and key) the party lacks. An identity of the same kind with a different code is a conflict and is never written. A record identity with neither type nor key is never written. |
 | Identities | `keep` | | Never writes identities. |
-| Addresses | none (empty) | yes | Never writes addresses. An invoice address is usually the trading address, not the registered office. |
-| Addresses | `append` | | Adds record addresses the party lacks. Two addresses are the same when their labels match, or when they are equal field by field if neither has a label. |
+| Addresses | `none` | yes | Never writes addresses. An invoice address is usually the trading address, not the registered office. |
+| Addresses | `append` | | Adds record addresses the party lacks. Two addresses are the same when their labels match, or when their postal fields are equal if neither has a label. |
 | Addresses | `replace` | | Makes the record's addresses the party's addresses. |
 
-A merge patch replaces arrays whole, so `identities` and `addresses` always appear as the full array: the party's entries followed by the additions. VIES returns no identities and no structured address, so a report from VIES alone patches at most the name.
+A merge patch replaces arrays whole, so `identities` and `addresses` always appear as the full array: the party's entries followed by the additions. A patch never changes `tax_id` and never removes an identity or an address, except under `replace`. VIES returns no identities and no structured address, so a report from VIES alone patches at most the name.
 
 ## Errors
 
@@ -157,7 +167,6 @@ An invalid identifier is a status, not an error. A register that cannot answer i
 - `ErrNetwork`: the request failed below HTTP. A dial error, a timeout, or a response that could not be decoded. It says nothing about the identifier.
 - `ErrServer`: the register answered with an unexpected status, for example a 500. The HTTP status is available through the `Code()` accessor.
 - `RateLimitedError`: the register's request budget is exhausted (HTTP 429). It carries a `RetryAfter` duration so the caller can requeue with a precise delay.
-- `ErrNotSupported`: reserved for callers that need to reject an identifier no verifier covers. The client reports it as the `unsupported` status.
 
 Match the sentinels with `errors.Is` and `RateLimitedError` with `errors.As`:
 
@@ -186,7 +195,7 @@ Install the command into your Go environment with:
 go install ./cmd/gobl.tin
 ```
 
-`verify` takes a GOBL envelope or document that holds an `org.Party` or a `bill.Invoice`. It prints one line per check, `<path>: <status> (<source>)`, and one indented line per mismatch. It exits with code 0 only when every printed report is valid.
+`verify` takes a GOBL envelope or document that holds an `org.Party` or a `bill.Invoice`, and verifies it with VIES. It prints one line per check, `<path>: <status> (<source>)`, and one indented line per mismatch.
 
 ```bash
 gobl.tin verify ./test/data/party.json
@@ -198,7 +207,16 @@ gobl.tin verify ./test/data/party.json
 /identities/0: unsupported
 ```
 
-For an invoice, `--party` selects the customer (the default), the supplier, or both. With `both`, each report is headed by its label:
+Exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Every printed report is valid. |
+| 1 | A report is not valid: an `invalid` check, or a party with no identifiers (`no identifiers to verify` on stderr). |
+| 2 | A register could not answer: some check is `unverified`. |
+| 3 | Usage, file or parse error. |
+
+For an invoice, `--party` selects the customer (the default), the supplier, or both. With `both`, each report is headed by its label. On a party document the flag is ignored with a warning on stderr.
 
 ```bash
 gobl.tin verify --party supplier ./test/data/invoice-valid.json
@@ -213,7 +231,7 @@ gobl.tin verify --json ./test/data/party.json
 
 ## Testing
 
-Tests run offline. Register responses are served by `httptest` servers and the command tests inject a fake verifier with `WithVerifier`, so no test dials the live VIES service. Run them with:
+Tests run offline. Register responses are served by `httptest` servers and the command tests inject a fake verifier, so no test dials the live VIES service. Fuzz tests run their seed corpus under `go test`; run one longer with `go test -fuzz=FuzzNormalizeName -fuzztime=30s .`
 
 ```bash
 go test -race ./...
