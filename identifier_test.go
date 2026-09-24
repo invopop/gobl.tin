@@ -22,6 +22,25 @@ func TestWalk(t *testing.T) {
 		assert.Empty(t, walk(&org.Party{TaxID: &tax.Identity{Country: "US"}}))
 	})
 
+	t.Run("codes that normalize to empty are skipped", func(t *testing.T) {
+		party := &org.Party{
+			TaxID: &tax.Identity{Country: "DE", Code: "DE"},
+			Identities: []*org.Identity{
+				{Country: "DE", Type: "HRB", Code: "   "},
+				{Country: "DE", Type: "HRB", Code: "12345"},
+			},
+		}
+		ids := walk(party)
+		require.Len(t, ids, 1)
+		assert.Equal(t, "/identities/1", ids[0].Path)
+	})
+
+	t.Run("greek identity keeps its ISO country", func(t *testing.T) {
+		ids := walk(&org.Party{Identities: []*org.Identity{{Country: "GR", Type: "AFM", Code: "1"}}})
+		require.Len(t, ids, 1)
+		assert.Equal(t, "GR", ids[0].Country.String())
+	})
+
 	t.Run("tax id first, then identities in order", func(t *testing.T) {
 		party := &org.Party{
 			TaxID: &tax.Identity{Country: "DE", Code: "282741168"},

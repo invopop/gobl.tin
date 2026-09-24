@@ -163,8 +163,9 @@ func (v *patcher) patchIdentities(p IdentitiesPolicy) ([]*org.Identity, error) {
 	var additions []*org.Identity
 	for _, r := range v.recordIdentities() {
 		// A record identity with neither type nor key cannot be matched
-		// against the party, so it is never written.
-		if r == nil || kindless(r) || hasKind(v.party.Identities, r) {
+		// against the party, so it is never written. Of two record
+		// identities of one kind, the first wins.
+		if r == nil || kindless(r) || hasKind(v.party.Identities, r) || hasKind(additions, r) {
 			continue
 		}
 		cp := *r
@@ -173,12 +174,10 @@ func (v *patcher) patchIdentities(p IdentitiesPolicy) ([]*org.Identity, error) {
 	if len(additions) == 0 {
 		return nil, nil
 	}
+	// The party's entries keep their positions, nil included, so that the
+	// /identities/N paths of the report stay valid after the patch.
 	out := make([]*org.Identity, 0, len(v.party.Identities)+len(additions))
-	for _, id := range v.party.Identities {
-		if id != nil {
-			out = append(out, id)
-		}
-	}
+	out = append(out, v.party.Identities...)
 	return append(out, additions...), nil
 }
 

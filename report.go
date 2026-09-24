@@ -34,8 +34,8 @@ type Verifier interface {
 // Answer is what a register says about one identifier. The Client turns it
 // into a Check.
 type Answer struct {
-	// Status is valid or invalid. An empty status makes the check
-	// unverified.
+	// Status is valid or invalid. Any other status, including empty, makes
+	// the check unverified.
 	Status Status
 
 	// Record is what the register holds for the identifier, when disclosed.
@@ -74,7 +74,8 @@ type Check struct {
 	Path string `json:"path"`
 
 	// TaxID is the normalized tax identity when the identifier is the
-	// party's tax_id. A verifier sets it to the identity the register echoes.
+	// party's tax_id. When the verifier's answer echoes one, the Client sets
+	// it from that echo, normalized.
 	TaxID *tax.Identity `json:"tax_id,omitempty"`
 
 	// Identity is the normalized identity when the identifier is one of the

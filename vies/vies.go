@@ -103,9 +103,10 @@ func New(opts ...Option) *Verifier {
 	} else if u.Hostname() == "" {
 		a.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: missing host", a.baseURL)
 	}
-	a.conn = resty.New()
 	if a.http != nil {
 		a.conn = resty.NewWithClient(a.http)
+	} else {
+		a.conn = resty.New()
 	}
 	a.conn.
 		SetBaseURL(a.baseURL).

@@ -338,6 +338,25 @@ func TestVerifyTaxID(t *testing.T) {
 		_, err = c.VerifyTaxID(ctx, &tax.Identity{Country: "DE"})
 		assert.ErrorIs(t, err, ErrInput)
 	})
+
+	t.Run("code that normalizes to empty is an input error", func(t *testing.T) {
+		before := len(fake.calls)
+		for _, code := range []cbc.Code{"DE", "---", " de "} {
+			_, err := c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: code})
+			assert.ErrorIs(t, err, ErrInput, code)
+		}
+		assert.Len(t, fake.calls, before, "nothing reaches the verifier")
+	})
+
+	t.Run("echo is stored normalized", func(t *testing.T) {
+		echo := valid("vies", nil)
+		echo.TaxID = &tax.Identity{Country: "DE", Code: "de 282-741-168"}
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": echo}}
+		check, err := New(fake).VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
+		require.NoError(t, err)
+		assert.Equal(t, "282741168", check.TaxID.Code.String())
+		assert.Empty(t, check.Mismatches)
+	})
 }
 
 func TestVerifyIdentity(t *testing.T) {
@@ -364,6 +383,8 @@ func TestVerifyIdentity(t *testing.T) {
 		_, err := c.VerifyIdentity(ctx, nil)
 		assert.ErrorIs(t, err, ErrInput)
 		_, err = c.VerifyIdentity(ctx, &org.Identity{Type: "CRN"})
+		assert.ErrorIs(t, err, ErrInput)
+		_, err = c.VerifyIdentity(ctx, &org.Identity{Type: "CRN", Code: "   "})
 		assert.ErrorIs(t, err, ErrInput)
 	})
 }

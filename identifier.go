@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/invopop/gobl/cbc"
-	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 )
@@ -19,21 +18,26 @@ type identifier struct {
 
 // walk lists the identifiers of a party in document order: the tax identity
 // first, then each identity. The party is left untouched; every GOBL value
-// is copied before normalization. A tax identity without a code and a nil
-// identity are skipped.
+// is copied before normalization. A nil identity, and an identifier whose
+// code is empty after normalization, are skipped: there is nothing to ask a
+// register about.
 func walk(party *org.Party) []identifier {
 	if party == nil {
 		return nil
 	}
 	var out []identifier
-	if party.TaxID != nil && party.TaxID.Code != "" {
-		out = append(out, fromTaxID(party.TaxID))
+	if party.TaxID != nil {
+		if id := fromTaxID(party.TaxID); id.Code != "" {
+			out = append(out, id)
+		}
 	}
-	for i, id := range party.Identities {
-		if id == nil {
+	for i, oid := range party.Identities {
+		if oid == nil {
 			continue
 		}
-		out = append(out, fromIdentity(i, id))
+		if id := fromIdentity(i, oid); id.Code != "" {
+			out = append(out, id)
+		}
 	}
 	return out
 }
@@ -53,13 +57,14 @@ func fromTaxID(tid *tax.Identity) identifier {
 }
 
 // fromIdentity copies and normalizes the identity at index i into an
-// identifier.
+// identifier. The ISO country becomes the tax country by cast: an identity
+// of Greece stays GR, while VIES knows Greece as EL.
 func fromIdentity(i int, id *org.Identity) identifier {
 	cp := normalizeIdentity(id)
 	return identifier{
 		Identifier: Identifier{
 			Path:    IdentityPath(i),
-			Country: l10n.TaxCountryCode(cp.Country),
+			Country: cp.Country.Code().Tax(),
 			Key:     cp.Key,
 			Type:    cp.Type,
 			Code:    cp.Code,

@@ -102,7 +102,7 @@ type Verifier interface {
 
 `Identifier` is the input a verifier receives: the path of the identifier in the party, whether it is the tax identity, its country, key, type and normalized code. Consumers never construct one; the client builds them from GOBL types.
 
-`Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. An answer with an empty status makes the check `unverified`.
+`Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. Any status other than `valid` or `invalid`, including empty, makes the check `unverified`.
 
 ## Report
 
@@ -131,7 +131,7 @@ Every path is a JSON Pointer relative to the party document. A consumer that pat
 
 ## Patch and Policy
 
-`tin.Patch(party, report, policy)` builds an [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON merge patch on the party. It contains only what the policy permits. A patch with nothing to write is `{}`. A nil party or report is `ErrInput`.
+`tin.Patch(party, report, policy)` builds an [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON merge patch on the party. It contains only what the policy permits. A patch with nothing to write is `{}`. A nil party or report, or an unknown policy value, is `ErrInput`.
 
 ```go
 patch, err := tin.Patch(party, report, tin.Policy{
@@ -157,7 +157,7 @@ Every policy field has a named default, and the empty string is an alias for it,
 | Addresses | `append` | | Adds record addresses the party lacks. Two addresses are the same when their labels match, or when their postal fields are equal if neither has a label. |
 | Addresses | `replace` | | Makes the record's addresses the party's addresses. |
 
-A merge patch replaces arrays whole, so `identities` and `addresses` always appear as the full array: the party's entries followed by the additions. A patch never changes `tax_id` and never removes an identity or an address, except under `replace`. VIES returns no identities and no structured address, so a report from VIES alone patches at most the name.
+A merge patch replaces arrays whole, so `identities` and `addresses` always appear as the full array: the party's entries, in their positions, followed by the additions. Of two record identities of one kind, only the first is added. A patch never changes `tax_id` and never removes an identity or an address, except under `replace`. VIES returns no identities and no structured address, so a report from VIES alone patches at most the name.
 
 ## Errors
 
@@ -215,6 +215,8 @@ Exit codes:
 | 1 | A report is not valid: an `invalid` check, or a party with no identifiers (`no identifiers to verify` on stderr). |
 | 2 | A register could not answer: some check is `unverified`. |
 | 3 | Usage, file or parse error. |
+
+With `--party both`, code 2 wins over code 1: an `unverified` check in either report exits 2 even when the other report is invalid.
 
 For an invoice, `--party` selects the customer (the default), the supplier, or both. With `both`, each report is headed by its label. On a party document the flag is ignored with a warning on stderr.
 

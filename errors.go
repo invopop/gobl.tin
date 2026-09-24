@@ -10,9 +10,10 @@ import (
 // ABOUT: An invalid identifier is not represented here at all; it is a Check
 // with StatusInvalid. A register that cannot answer is a Check with
 // StatusUnverified that carries the error. Errors cover only the cases where
-// the register could not give an answer. Callers match on the sentinels with errors.Is and on
-// RateLimitedError with errors.As. Errors that come from an HTTP response
-// carry the status via Code(), so callers can distinguish structurally.
+// the register could not give an answer. Callers match on the sentinels with
+// errors.Is and on RateLimitedError with errors.As. Errors that come from an
+// HTTP response carry the status via Code(), so callers can distinguish
+// structurally.
 //
 // Verifiers map HTTP statuses as follows: 400 is ErrInput, 429 is
 // RateLimitedError, and every other unexpected status, including edge

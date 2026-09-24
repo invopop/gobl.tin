@@ -232,6 +232,29 @@ func TestPatch(t *testing.T) {
 			assert.Equal(t, `{}`, string(patch))
 		})
 
+		t.Run("two record identities of one kind add only the first", func(t *testing.T) {
+			party := &org.Party{}
+			twice := &Record{Identities: []*org.Identity{
+				{Country: "GB", Type: "CRN", Code: "first"},
+				{Country: "GB", Type: "CRN", Code: "second"},
+			}}
+			patch, err := patchOf(party, Policy{}, validCheck(twice))
+			require.NoError(t, err)
+			assert.Equal(t, `{"identities":[{"country":"GB","type":"CRN","code":"first"}]}`, string(patch))
+		})
+
+		t.Run("nil party entries keep their positions", func(t *testing.T) {
+			party := &org.Party{Identities: []*org.Identity{nil, {Country: "GB", Type: "CRN", Code: "00445790"}}}
+			single := &Record{Identities: rec.Identities[1:]}
+			patch, err := patchOf(party, Policy{}, validCheck(single))
+			require.NoError(t, err)
+			assert.Equal(t, `{"identities":[null,{"country":"GB","type":"CRN","code":"00445790"},{"country":"GB","type":"UTR","code":"1234567890"}]}`, string(patch))
+			got := applyPatch(t, party, patch)
+			require.Len(t, got.Identities, 3)
+			assert.Nil(t, got.Identities[0])
+			assert.Equal(t, "UTR", got.Identities[2].Type.String())
+		})
+
 		t.Run("two party identities of one kind still block the addition", func(t *testing.T) {
 			party := &org.Party{Identities: []*org.Identity{
 				{Country: "GB", Type: "CRN", Code: "1"},

@@ -70,10 +70,10 @@ func (c *Client) VerifyTaxID(ctx context.Context, tid *tax.Identity) (*Check, er
 	if tid == nil {
 		return nil, ErrInput.WithMessage("no tax identity provided")
 	}
-	if tid.Code == "" {
+	id := fromTaxID(tid)
+	if id.Code == "" {
 		return nil, ErrInput.WithMessage("no tax identity code provided")
 	}
-	id := fromTaxID(tid)
 	id.Path = ""
 	check := c.check(ctx, id)
 	check.Mismatches = mismatches(nil, nil, id, check)
@@ -87,10 +87,10 @@ func (c *Client) VerifyIdentity(ctx context.Context, oid *org.Identity) (*Check,
 	if oid == nil {
 		return nil, ErrInput.WithMessage("no identity provided")
 	}
-	if oid.Code == "" {
+	id := fromIdentity(0, oid)
+	if id.Code == "" {
 		return nil, ErrInput.WithMessage("no identity code provided")
 	}
-	id := fromIdentity(0, oid)
 	id.Path = ""
 	check := c.check(ctx, id)
 	check.Mismatches = mismatches(nil, nil, id, check)
@@ -141,7 +141,7 @@ func (c *Client) check(ctx context.Context, id identifier) *Check {
 			check.CheckedAt = time.Now().UTC()
 		}
 		if ans.TaxID != nil && id.taxID != nil {
-			check.TaxID = ans.TaxID
+			check.TaxID = normalizeTaxID(ans.TaxID)
 		}
 	}
 	return check
