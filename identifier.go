@@ -44,6 +44,7 @@ func fromTaxID(tid *tax.Identity) identifier {
 	return identifier{
 		Identifier: Identifier{
 			Path:    PathTaxID,
+			TaxID:   true,
 			Country: cp.Country,
 			Code:    cp.Code,
 		},
@@ -86,4 +87,16 @@ func normalizeIdentity(id *org.Identity) *org.Identity {
 // normalizeCode trims and upper cases an identity code.
 func normalizeCode(c cbc.Code) cbc.Code {
 	return cbc.Code(strings.ToUpper(strings.TrimSpace(c.String())))
+}
+
+// sameKind reports whether two identities are of one kind: same country,
+// type and key. The code is not compared.
+func sameKind(a, b *org.Identity) bool {
+	return a != nil && b != nil && a.Country == b.Country && a.Type == b.Type && a.Key == b.Key
+}
+
+// kindless reports whether an identity has neither a type nor a key, so that
+// it cannot be matched against the party's identities.
+func kindless(id *org.Identity) bool {
+	return id.Type == "" && id.Key == ""
 }

@@ -64,7 +64,8 @@ func (c *Client) Verify(ctx context.Context, party *org.Party) (*Report, error) 
 }
 
 // VerifyTaxID checks one tax identity. An identity that no verifier covers
-// is a Check with StatusUnsupported, not an error.
+// is a Check with StatusUnsupported, not an error. The Check has no Path:
+// there is no party document to point into.
 func (c *Client) VerifyTaxID(ctx context.Context, tid *tax.Identity) (*Check, error) {
 	if tid == nil {
 		return nil, ErrInput.WithMessage("no tax identity provided")
@@ -73,13 +74,15 @@ func (c *Client) VerifyTaxID(ctx context.Context, tid *tax.Identity) (*Check, er
 		return nil, ErrInput.WithMessage("no tax identity code provided")
 	}
 	id := fromTaxID(tid)
+	id.Path = ""
 	check := c.check(ctx, id)
 	check.Mismatches = mismatches(nil, nil, id, check)
 	return check, nil
 }
 
 // VerifyIdentity checks one identity. An identity that no verifier covers is
-// a Check with StatusUnsupported, not an error.
+// a Check with StatusUnsupported, not an error. The Check has no Path: there
+// is no party document to point into.
 func (c *Client) VerifyIdentity(ctx context.Context, oid *org.Identity) (*Check, error) {
 	if oid == nil {
 		return nil, ErrInput.WithMessage("no identity provided")
@@ -88,6 +91,7 @@ func (c *Client) VerifyIdentity(ctx context.Context, oid *org.Identity) (*Check,
 		return nil, ErrInput.WithMessage("no identity code provided")
 	}
 	id := fromIdentity(0, oid)
+	id.Path = ""
 	check := c.check(ctx, id)
 	check.Mismatches = mismatches(nil, nil, id, check)
 	return check, nil

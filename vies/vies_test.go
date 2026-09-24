@@ -298,14 +298,15 @@ func TestVerifier(t *testing.T) {
 
 	t.Run("supports EU tax identities only", func(t *testing.T) {
 		a := New()
-		assert.True(t, a.Supports(tin.Identifier{Country: "ES", Code: "B85905495"}))
-		assert.True(t, a.Supports(tin.Identifier{Country: "EL", Code: "123456789"}), "VIES uses EL for Greece")
-		assert.True(t, a.Supports(tin.Identifier{Country: "XI", Code: "123456789"}), "VIES covers Northern Ireland as XI")
-		assert.False(t, a.Supports(tin.Identifier{Country: "GB", Code: "123456789"}), "GB proper is not covered")
-		assert.False(t, a.Supports(tin.Identifier{Country: "US", Code: "123456789"}))
-		assert.False(t, a.Supports(tin.Identifier{Code: "123456789"}))
-		assert.False(t, a.Supports(tin.Identifier{Country: "DE", Type: "HRB", Code: "12345"}), "org identities are not tax identities")
+		assert.True(t, a.Supports(tin.Identifier{TaxID: true, Country: "ES", Code: "B85905495"}))
+		assert.True(t, a.Supports(tin.Identifier{TaxID: true, Country: "EL", Code: "123456789"}), "VIES uses EL for Greece")
+		assert.True(t, a.Supports(tin.Identifier{TaxID: true, Country: "XI", Code: "123456789"}), "VIES covers Northern Ireland as XI")
+		assert.False(t, a.Supports(tin.Identifier{TaxID: true, Country: "GB", Code: "123456789"}), "GB proper is not covered")
+		assert.False(t, a.Supports(tin.Identifier{TaxID: true, Country: "US", Code: "123456789"}))
+		assert.False(t, a.Supports(tin.Identifier{TaxID: true, Code: "123456789"}))
+		assert.False(t, a.Supports(tin.Identifier{Country: "DE", Type: "HRB", Code: "12345"}), "typed identities are not tax identities")
 		assert.False(t, a.Supports(tin.Identifier{Country: "DE", Key: "other", Code: "12345"}))
+		assert.False(t, a.Supports(tin.Identifier{Country: "DE", Code: "12345"}), "untyped identities never route to VIES")
 	})
 
 	t.Run("valid with disclosed name", func(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
@@ -216,6 +217,32 @@ func TestPatch(t *testing.T) {
 			assert.Equal(t, `{}`, string(patch))
 		})
 
+		t.Run("a keyed identity is not the same kind as a typed one", func(t *testing.T) {
+			party := &org.Party{Identities: []*org.Identity{{Country: "GB", Key: "other", Type: "CRN", Code: "1"}}}
+			single := &Record{Identities: rec.Identities[:1]}
+			patch, err := patchOf(party, Policy{}, validCheck(single))
+			require.NoError(t, err)
+			assert.Equal(t, `{"identities":[{"country":"GB","key":"other","type":"CRN","code":"1"},{"country":"GB","type":"CRN","code":"00445790"}]}`, string(patch))
+		})
+
+		t.Run("a record identity without type or key is never written", func(t *testing.T) {
+			party := &org.Party{}
+			patch, err := patchOf(party, Policy{}, validCheck(&Record{Identities: []*org.Identity{{Country: "GB", Code: "plain"}}}))
+			require.NoError(t, err)
+			assert.Equal(t, `{}`, string(patch))
+		})
+
+		t.Run("two party identities of one kind still block the addition", func(t *testing.T) {
+			party := &org.Party{Identities: []*org.Identity{
+				{Country: "GB", Type: "CRN", Code: "1"},
+				{Country: "GB", Type: "CRN", Code: "2"},
+			}}
+			single := &Record{Identities: rec.Identities[:1]}
+			patch, err := patchOf(party, Policy{}, validCheck(single))
+			require.NoError(t, err)
+			assert.Equal(t, `{}`, string(patch))
+		})
+
 		t.Run("a different country is not the same kind", func(t *testing.T) {
 			party := &org.Party{Identities: []*org.Identity{{Country: "IE", Type: "CRN", Code: "123"}}}
 			single := &Record{Identities: rec.Identities[:1]}
@@ -267,6 +294,22 @@ func TestPatch(t *testing.T) {
 			patch, err := patchOf(party, Policy{Addresses: AddressPolicyAppend}, validCheck(&Record{Addresses: []*org.Address{plain}}))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
+		})
+
+		t.Run("append ignores coordinates and metadata when comparing", func(t *testing.T) {
+			plain := &org.Address{Street: "Musterstr.", Locality: "Berlin", Country: "DE", Coordinates: &org.Coordinates{}}
+			party := &org.Party{Addresses: []*org.Address{{Street: "Musterstr.", Locality: "Berlin", Country: "DE", Meta: cbc.Meta{"x": "y"}}}}
+			patch, err := patchOf(party, Policy{Addresses: AddressPolicyAppend}, validCheck(&Record{Addresses: []*org.Address{plain}}))
+			require.NoError(t, err)
+			assert.Equal(t, `{}`, string(patch))
+		})
+
+		t.Run("append adds an unlabelled address that differs in a postal field", func(t *testing.T) {
+			plain := &org.Address{Street: "Musterstr.", Locality: "Berlin", Country: "DE"}
+			party := &org.Party{Addresses: []*org.Address{{Street: "Musterstr.", Locality: "Potsdam", Country: "DE"}}}
+			patch, err := patchOf(party, Policy{Addresses: AddressPolicyAppend}, validCheck(&Record{Addresses: []*org.Address{plain}}))
+			require.NoError(t, err)
+			assert.Equal(t, `{"addresses":[{"street":"Musterstr.","locality":"Potsdam","country":"DE"},{"street":"Musterstr.","locality":"Berlin","country":"DE"}]}`, string(patch))
 		})
 
 		t.Run("replace writes the record addresses", func(t *testing.T) {

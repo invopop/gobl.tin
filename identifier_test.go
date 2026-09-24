@@ -83,8 +83,23 @@ func TestWalk(t *testing.T) {
 		ids := walk(party)
 		require.Len(t, ids, 1)
 		assert.Equal(t, "other", ids[0].Key.String())
+		assert.False(t, ids[0].IsTaxID())
 		assert.Empty(t, ids[0].Type)
 		assert.Empty(t, ids[0].Country)
 		assert.Equal(t, "ABC", ids[0].Code.String())
 	})
+}
+
+func TestSameKind(t *testing.T) {
+	crn := &org.Identity{Country: "GB", Type: "CRN", Code: "1"}
+	assert.True(t, sameKind(crn, &org.Identity{Country: "GB", Type: "CRN", Code: "2"}))
+	assert.False(t, sameKind(crn, &org.Identity{Country: "IE", Type: "CRN", Code: "1"}))
+	assert.False(t, sameKind(crn, &org.Identity{Country: "GB", Type: "UTR", Code: "1"}))
+	assert.False(t, sameKind(crn, &org.Identity{Country: "GB", Key: "other", Type: "CRN", Code: "1"}))
+	assert.False(t, sameKind(nil, crn))
+	assert.False(t, sameKind(crn, nil))
+
+	assert.True(t, kindless(&org.Identity{Country: "GB", Code: "1"}))
+	assert.False(t, kindless(crn))
+	assert.False(t, kindless(&org.Identity{Key: "other", Code: "1"}))
 }

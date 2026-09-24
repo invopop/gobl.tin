@@ -20,7 +20,12 @@ import (
 // Identifier is one identifier of a party as a verifier sees it.
 type Identifier struct {
 	// Path locates the identifier in the party: "/tax_id" or "/identities/N".
+	// Empty when a single identifier is verified without a party document.
 	Path string
+
+	// TaxID marks the party's tax identity as opposed to one of its
+	// identities.
+	TaxID bool
 
 	// Country is the tax country of the identifier.
 	Country l10n.TaxCountryCode
@@ -37,7 +42,7 @@ type Identifier struct {
 
 // IsTaxID reports whether the identifier is the party's tax identity.
 func (id Identifier) IsTaxID() bool {
-	return id.Path == PathTaxID
+	return id.TaxID
 }
 
 // PathTaxID is the path of a party's tax identity.
@@ -54,4 +59,10 @@ func IdentityPath(i int) string {
 // CodePath returns the path of the code field under an identifier path.
 func CodePath(path string) string {
 	return path + "/code"
+}
+
+// CountryPath returns the path of the country field under an identifier
+// path.
+func CountryPath(path string) string {
+	return path + "/country"
 }

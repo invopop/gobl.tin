@@ -143,9 +143,9 @@ func (a *Verifier) Source() cbc.Key {
 }
 
 // Supports reports whether the identifier is a tax identity of a country
-// that VIES covers.
+// that VIES covers. Identities, typed or not, never route here.
 func (a *Verifier) Supports(id tin.Identifier) bool {
-	return id.Type == "" && id.Key == "" && id.Country.Code().In(countryCodes...)
+	return id.IsTaxID() && id.Country.Code().In(countryCodes...)
 }
 
 // Verify checks the identifier against VIES. An unregistered number is an

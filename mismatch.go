@@ -29,20 +29,30 @@ func mismatches(party *org.Party, ids []identifier, id identifier, check *Check)
 }
 
 // taxIDMismatch compares the tax identity the register echoes with the
-// party's normalized tax identity.
+// party's normalized tax identity. A different code points at /tax_id/code;
+// a different country at /tax_id/country.
 func taxIDMismatch(id identifier, check *Check) *Mismatch {
 	if !id.IsTaxID() || check.TaxID == nil || check.TaxID == id.taxID {
 		return nil
 	}
 	echo := normalizeTaxID(check.TaxID)
-	if echo.Country == id.taxID.Country && echo.Code == id.taxID.Code {
+	switch {
+	case echo.Country != id.taxID.Country:
+		return &Mismatch{
+			Field:    MismatchTaxID,
+			Path:     CountryPath(PathTaxID),
+			Document: id.taxID.Country.String(),
+			Register: echo.Country.String(),
+		}
+	case echo.Code != id.taxID.Code:
+		return &Mismatch{
+			Field:    MismatchTaxID,
+			Path:     CodePath(PathTaxID),
+			Document: id.taxID.Code.String(),
+			Register: echo.Code.String(),
+		}
+	default:
 		return nil
-	}
-	return &Mismatch{
-		Field:    MismatchTaxID,
-		Path:     CodePath(PathTaxID),
-		Document: id.taxID.String(),
-		Register: echo.String(),
 	}
 }
 
@@ -56,16 +66,17 @@ func nameMismatch(party *org.Party, rec *Record) *Mismatch {
 }
 
 // identityMismatches compares each record identity with the party
-// identities of the same country and type.
+// identities of the same kind. A record identity with neither type nor key
+// cannot be matched and is skipped.
 func identityMismatches(ids []identifier, rec *Record) []*Mismatch {
 	var out []*Mismatch
 	for _, r := range rec.Identities {
-		if r == nil || r.Type == "" {
+		if r == nil || kindless(r) {
 			continue
 		}
 		code := normalizeCode(r.Code)
 		for _, id := range ids {
-			if !sameIdentityType(id, r) || id.Code == code {
+			if !sameKind(id.identity, r) || id.Code == code {
 				continue
 			}
 			out = append(out, &Mismatch{
@@ -77,10 +88,4 @@ func identityMismatches(ids []identifier, rec *Record) []*Mismatch {
 		}
 	}
 	return out
-}
-
-// sameIdentityType reports whether the identifier is an identity of the same
-// country and type as the record identity.
-func sameIdentityType(id identifier, r *org.Identity) bool {
-	return id.identity != nil && id.identity.Country == r.Country && id.Type == r.Type
 }

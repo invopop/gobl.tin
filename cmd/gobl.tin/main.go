@@ -19,11 +19,42 @@ var (
 	date    = ""
 )
 
+// Exit codes.
+const (
+	exitValid      = 0
+	exitInvalid    = 1
+	exitUnverified = 2
+	exitUsage      = 3
+)
+
+// exitError carries the exit code for a failure whose message is already on
+// the terminal, or that needs one printed.
+type exitError struct {
+	code int
+	msg  string
+}
+
+func (e *exitError) Error() string { return e.msg }
+
 func main() {
-	if err := run(); err != nil {
+	err := run()
+	if err != nil && err.Error() != "" {
 		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
+	os.Exit(exitCode(err))
+}
+
+// exitCode maps an error to the process exit code: report outcomes carry
+// their own code, everything else is a usage, IO or parse failure.
+func exitCode(err error) int {
+	if err == nil {
+		return exitValid
+	}
+	var e *exitError
+	if errors.As(err, &e) {
+		return e.code
+	}
+	return exitUsage
 }
 
 func run() error {

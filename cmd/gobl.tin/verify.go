@@ -15,9 +15,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// errNotValid makes the command exit non-zero when a printed report is not
-// valid. The report lines are already on stdout by then.
-var errNotValid = errors.New("verification failed")
+// Report outcomes. The report lines are already on stdout by then, so the
+// errors carry no message.
+var (
+	// errInvalid means a printed report is not valid.
+	errInvalid = &exitError{code: exitInvalid}
+
+	// errUnverified means a register could not answer for some check.
+	errUnverified = &exitError{code: exitUnverified}
+)
 
 // Party selectors for an invoice.
 const (
@@ -67,9 +73,12 @@ func (c *verifyOpts) runE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	parties, err := c.selectParties(data)
+	parties, isParty, err := c.selectParties(data)
 	if err != nil {
 		return err
+	}
+	if isParty && cmd.Flags().Changed("party") {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: --party is ignored for a party document")
 	}
 
 	verifiers := c.verifiers
@@ -95,12 +104,32 @@ func (c *verifyOpts) runE(cmd *cobra.Command, args []string) error {
 		printReports(cmd.OutOrStdout(), reports)
 	}
 
+	return outcome(cmd.ErrOrStderr(), reports)
+}
+
+// outcome maps the reports to the exit outcome: unverified when a register
+// could not answer, invalid when a report is not valid, nil when every
+// report is valid. A report without checks is reported on stderr.
+func outcome(stderr io.Writer, reports []labelled) error {
+	var err error
 	for _, r := range reports {
+		if len(r.report.Checks) == 0 {
+			if r.label != "" {
+				_, _ = fmt.Fprintf(stderr, "%s: no identifiers to verify\n", r.label)
+			} else {
+				_, _ = fmt.Fprintln(stderr, "no identifiers to verify")
+			}
+		}
+		for _, c := range r.report.Checks {
+			if c.Status == tin.StatusUnverified {
+				return errUnverified
+			}
+		}
 		if !r.report.Valid() {
-			return errNotValid
+			err = errInvalid
 		}
 	}
-	return nil
+	return err
 }
 
 // selected is one party to verify with the label it is printed under. The
@@ -111,11 +140,12 @@ type selected struct {
 }
 
 // selectParties parses the input as a GOBL envelope or document and picks the
-// parties the --party flag asks for.
-func (c *verifyOpts) selectParties(data []byte) ([]selected, error) {
+// parties the --party flag asks for. isParty reports a party document, for
+// which the flag has no meaning.
+func (c *verifyOpts) selectParties(data []byte) (parties []selected, isParty bool, err error) {
 	doc, err := gobl.Parse(data)
 	if err != nil {
-		return nil, fmt.Errorf("parsing input: %w", err)
+		return nil, false, fmt.Errorf("parsing input: %w", err)
 	}
 	if env, ok := doc.(*gobl.Envelope); ok {
 		doc = env.Extract()
@@ -123,11 +153,12 @@ func (c *verifyOpts) selectParties(data []byte) ([]selected, error) {
 
 	switch d := doc.(type) {
 	case *org.Party:
-		return []selected{{party: d}}, nil
+		return []selected{{party: d}}, true, nil
 	case *bill.Invoice:
-		return c.selectInvoiceParties(d)
+		parties, err = c.selectInvoiceParties(d)
+		return parties, false, err
 	default:
-		return nil, fmt.Errorf("unsupported document type %T", doc)
+		return nil, false, fmt.Errorf("unsupported document type %T", doc)
 	}
 }
 

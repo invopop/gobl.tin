@@ -48,9 +48,17 @@ func validCheck(name string) *tin.Answer {
 	return c
 }
 
-// runVerify executes the verify command with the fake and returns stdout and the
-// error.
+// runVerify executes the verify command with the fake and returns stdout and
+// the error. stderr is discarded; use runVerifyStderr to read it.
 func runVerify(t *testing.T, fake *fakeVIES, args ...string) (string, error) {
+	t.Helper()
+	out, _, err := runVerifyStderr(t, fake, args...)
+	return out, err
+}
+
+// runVerifyStderr executes the verify command with the fake and returns
+// stdout, stderr and the error.
+func runVerifyStderr(t *testing.T, fake *fakeVIES, args ...string) (string, string, error) {
 	t.Helper()
 	cmd := &cobra.Command{SilenceUsage: true, SilenceErrors: true}
 	vo := verify(&rootOpts{})
@@ -58,12 +66,12 @@ func runVerify(t *testing.T, fake *fakeVIES, args ...string) (string, error) {
 		vo.verifiers = []tin.Verifier{fake}
 	}
 	cmd.AddCommand(vo.cmd())
-	out := &bytes.Buffer{}
+	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
 	cmd.SetOut(out)
-	cmd.SetErr(out)
+	cmd.SetErr(errOut)
 	cmd.SetArgs(append([]string{"verify"}, args...))
 	err := cmd.Execute()
-	return out.String(), err
+	return out.String(), errOut.String(), err
 }
 
 func TestVerifyCommand(t *testing.T) {
@@ -105,20 +113,22 @@ func TestVerifyCommand(t *testing.T) {
 			"  /tax_id: valid (vies)\n", out)
 	})
 
-	t.Run("invalid check exits non-zero after printing", func(t *testing.T) {
+	t.Run("invalid check exits 1 after printing", func(t *testing.T) {
 		fake := &fakeVIES{checks: map[cbc.Code]*tin.Answer{"111111125": validCheck("")}}
 		out, err := runVerify(t, fake, "../../test/data/invoice-valid.json", "--party", "both")
-		assert.ErrorIs(t, err, errNotValid)
+		assert.ErrorIs(t, err, errInvalid)
+		assert.Equal(t, exitInvalid, exitCode(err))
 		assert.Equal(t, "customer:\n"+
 			"  /tax_id: invalid (vies)\n"+
 			"supplier:\n"+
 			"  /tax_id: valid (vies)\n", out)
 	})
 
-	t.Run("unverified check prints the failure and exits non-zero", func(t *testing.T) {
+	t.Run("unverified check prints the failure and exits 2", func(t *testing.T) {
 		fake := &fakeVIES{errs: map[cbc.Code]error{"282741168": tin.ErrServer.WithCode("500").WithMessage("MS_UNAVAILABLE")}}
 		out, err := runVerify(t, fake, "../../test/data/party.json")
-		assert.ErrorIs(t, err, errNotValid)
+		assert.ErrorIs(t, err, errUnverified)
+		assert.Equal(t, exitUnverified, exitCode(err))
 		assert.Equal(t, "/tax_id: unverified (vies): server: 500: MS_UNAVAILABLE\n"+
 			"/identities/0: unsupported\n", out)
 	})
@@ -142,9 +152,41 @@ func TestVerifyCommand(t *testing.T) {
 		assert.Contains(t, got, "supplier")
 	})
 
-	t.Run("missing customer", func(t *testing.T) {
+	t.Run("valid exits 0", func(t *testing.T) {
+		_, err := runVerify(t, allValid, "../../test/data/party.json")
+		require.NoError(t, err)
+		assert.Equal(t, exitValid, exitCode(err))
+	})
+
+	t.Run("unverified wins over invalid", func(t *testing.T) {
+		fake := &fakeVIES{errs: map[cbc.Code]error{"111111125": tin.ErrNetwork.WithMessage("dial")}}
+		_, err := runVerify(t, fake, "../../test/data/invoice-valid.json", "--party", "both")
+		assert.Equal(t, exitUnverified, exitCode(err))
+	})
+
+	t.Run("party without identifiers exits 1 with a notice", func(t *testing.T) {
+		out, stderr, err := runVerifyStderr(t, allValid, "../../test/data/party-empty.json")
+		assert.Equal(t, exitInvalid, exitCode(err))
+		assert.Empty(t, out)
+		assert.Equal(t, "no identifiers to verify\n", stderr)
+	})
+
+	t.Run("party flag on a party document warns", func(t *testing.T) {
+		_, stderr, err := runVerifyStderr(t, allValid, "../../test/data/party.json", "--party", "supplier")
+		require.NoError(t, err)
+		assert.Equal(t, "warning: --party is ignored for a party document\n", stderr)
+	})
+
+	t.Run("missing customer exits 3", func(t *testing.T) {
 		_, err := runVerify(t, allValid, "../../test/data/invoice-no-customer.json")
 		assert.EqualError(t, err, "invoice has no customer")
+		assert.Equal(t, exitUsage, exitCode(err))
+	})
+
+	t.Run("unparseable input exits 3", func(t *testing.T) {
+		_, err := runVerify(t, allValid, "../../go.mod")
+		assert.Error(t, err)
+		assert.Equal(t, exitUsage, exitCode(err))
 	})
 
 	t.Run("unknown party selector", func(t *testing.T) {
@@ -157,10 +199,12 @@ func TestVerifyCommand(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("argument count", func(t *testing.T) {
+	t.Run("argument count exits 3", func(t *testing.T) {
 		_, err := runVerify(t, allValid)
 		assert.Error(t, err)
+		assert.Equal(t, exitUsage, exitCode(err))
 		_, err = runVerify(t, allValid, "a", "b")
 		assert.Error(t, err)
+		assert.Equal(t, exitUsage, exitCode(err))
 	})
 }

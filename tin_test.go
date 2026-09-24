@@ -261,7 +261,38 @@ func TestVerify(t *testing.T) {
 		require.NoError(t, err)
 		c := report.Checks[0]
 		require.Len(t, c.Mismatches, 1)
-		assert.Equal(t, &Mismatch{Field: MismatchTaxID, Path: "/tax_id/code", Document: "DE282741168", Register: "DE999999999"}, c.Mismatches[0])
+		assert.Equal(t, &Mismatch{Field: MismatchTaxID, Path: "/tax_id/code", Document: "282741168", Register: "999999999"}, c.Mismatches[0])
+	})
+
+	t.Run("tax id echo country mismatch", func(t *testing.T) {
+		echo := valid("vies", nil)
+		echo.TaxID = &tax.Identity{Country: "AT", Code: "282741168"}
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": echo}}
+		report, err := New(fake).Verify(ctx, &org.Party{TaxID: &tax.Identity{Country: "DE", Code: "282741168"}})
+		require.NoError(t, err)
+		c := report.Checks[0]
+		require.Len(t, c.Mismatches, 1)
+		assert.Equal(t, &Mismatch{Field: MismatchTaxID, Path: "/tax_id/country", Document: "DE", Register: "AT"}, c.Mismatches[0])
+	})
+
+	t.Run("identity kind includes the key", func(t *testing.T) {
+		reg := &fakeVerifier{
+			source:   "companies",
+			supports: typeOnly("UTR"),
+			checks: map[cbc.Code]*Answer{"00445790": valid("companies", &Record{Identities: []*org.Identity{
+				{Country: "GB", Type: "UTR", Code: "1234567890"},
+				{Country: "GB", Code: "kindless"},
+			}})},
+		}
+		party := &org.Party{Identities: []*org.Identity{
+			{Country: "GB", Type: "UTR", Code: "00445790"},
+			{Country: "GB", Key: "other", Type: "UTR", Code: "0000000000"},
+			{Country: "GB", Code: "plain"},
+		}}
+		report, err := New(reg).Verify(ctx, party)
+		require.NoError(t, err)
+		require.Len(t, report.Checks[0].Mismatches, 1, "a keyed identity is another kind; a kindless record identity is skipped")
+		assert.Equal(t, "/identities/0/code", report.Checks[0].Mismatches[0].Path)
 	})
 
 	t.Run("matching name is not a mismatch", func(t *testing.T) {
@@ -287,7 +318,8 @@ func TestVerifyTaxID(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		check, err := c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
 		require.NoError(t, err)
-		assert.Equal(t, "/tax_id", check.Path)
+		assert.Empty(t, check.Path, "no party document to point into")
+		assert.True(t, fake.calls[len(fake.calls)-1].IsTaxID())
 		assert.Equal(t, StatusValid, check.Status)
 		assert.Empty(t, check.Mismatches, "no party to compare the name with")
 		assert.Equal(t, "ACME GMBH", check.Record.Name)
@@ -316,7 +348,7 @@ func TestVerifyIdentity(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		check, err := c.VerifyIdentity(ctx, &org.Identity{Country: "GB", Type: "CRN", Code: "00445790"})
 		require.NoError(t, err)
-		assert.Equal(t, "/identities/0", check.Path)
+		assert.Empty(t, check.Path, "no party document to point into")
 		assert.Equal(t, StatusValid, check.Status)
 		require.NotNil(t, check.Identity)
 		assert.Nil(t, check.TaxID)

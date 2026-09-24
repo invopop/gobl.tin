@@ -2,8 +2,9 @@ package tin
 
 import (
 	"encoding/json"
-	"reflect"
 
+	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
 )
 
@@ -161,7 +162,9 @@ func (v *patcher) patchIdentities(p IdentitiesPolicy) ([]*org.Identity, error) {
 	}
 	var additions []*org.Identity
 	for _, r := range v.recordIdentities() {
-		if r == nil || hasIdentityKind(v.party.Identities, r) {
+		// A record identity with neither type nor key cannot be matched
+		// against the party, so it is never written.
+		if r == nil || kindless(r) || hasKind(v.party.Identities, r) {
 			continue
 		}
 		cp := *r
@@ -257,11 +260,11 @@ func (v *patcher) validRecords() []*Record {
 	return out
 }
 
-// hasIdentityKind reports whether the set holds an identity of the same
-// country, key and type as r, whatever its code.
-func hasIdentityKind(set []*org.Identity, r *org.Identity) bool {
+// hasKind reports whether the set holds an identity of the same kind as r,
+// whatever its code.
+func hasKind(set []*org.Identity, r *org.Identity) bool {
 	for _, id := range set {
-		if id != nil && id.Country == r.Country && id.Key == r.Key && id.Type == r.Type {
+		if sameKind(id, r) {
 			return true
 		}
 	}
@@ -269,7 +272,7 @@ func hasIdentityKind(set []*org.Identity, r *org.Identity) bool {
 }
 
 // hasAddress reports whether the set holds r: by label when r has one, else
-// field by field.
+// by the postal fields.
 func hasAddress(set []*org.Address, r *org.Address) bool {
 	for _, a := range set {
 		if a == nil {
@@ -281,9 +284,32 @@ func hasAddress(set []*org.Address, r *org.Address) bool {
 			}
 			continue
 		}
-		if a.Label == "" && reflect.DeepEqual(a, r) {
+		if postalOf(a) == postalOf(r) {
 			return true
 		}
 	}
 	return false
+}
+
+// postal is the comparable projection of an address: the fields that place
+// it, without coordinates or metadata.
+type postal struct {
+	label, poBox, number, street, streetExtra, locality, region string
+	code                                                        cbc.Code
+	country                                                     l10n.ISOCountryCode
+}
+
+// postalOf projects an address onto its postal fields.
+func postalOf(a *org.Address) postal {
+	return postal{
+		label:       a.Label,
+		poBox:       a.PostOfficeBox,
+		number:      a.Number,
+		street:      a.Street,
+		streetExtra: a.StreetExtra,
+		locality:    a.Locality,
+		region:      a.Region,
+		code:        a.Code,
+		country:     a.Country,
+	}
 }
