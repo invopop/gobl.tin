@@ -16,6 +16,7 @@ package tin
 
 import (
 	"context"
+	"time"
 
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
@@ -48,12 +49,12 @@ func New(verifiers ...Verifier) *Client {
 // each identity in order. The report carries one Check per identifier. A
 // register that cannot answer marks its Check unverified; Verify itself
 // returns an error only for a nil party.
-func (c *Client) Verify(ctx context.Context, party *org.Party) (*Verification, error) {
+func (c *Client) Verify(ctx context.Context, party *org.Party) (*Report, error) {
 	if party == nil {
 		return nil, ErrInput.WithMessage("no party provided")
 	}
 	ids := walk(party)
-	report := NewVerification(party)
+	report := new(Report)
 	for _, id := range ids {
 		check := c.check(ctx, id)
 		check.Mismatches = mismatches(party, ids, id, check)
@@ -110,36 +111,36 @@ func (c *Client) SupportsIdentity(oid *org.Identity) bool {
 	return c.verifierFor(fromIdentity(0, oid).Identifier) != nil
 }
 
-// check runs the first verifier that supports the identifier and shapes the
-// outcome into a Check that names the identifier.
+// check runs the first verifier that supports the identifier and builds the
+// Check from its answer.
 func (c *Client) check(ctx context.Context, id identifier) *Check {
+	check := &Check{Path: id.Path, TaxID: id.taxID, Identity: id.identity}
 	v := c.verifierFor(id.Identifier)
 	if v == nil {
-		return id.check(&Check{Status: StatusUnsupported})
+		check.Status = StatusUnsupported
+		return check
 	}
-	check, err := v.Verify(ctx, id.Identifier)
-	if err != nil {
-		check = &Check{Source: v.Source()}
-		check.Fail(err)
-		return id.check(check)
+	check.Source = v.Source()
+	ans, err := v.Verify(ctx, id.Identifier)
+	switch {
+	case err != nil:
+		check.fail(err)
+	case ans == nil:
+		check.fail(ErrServer.WithMessage("verifier returned no answer"))
+	case ans.Status != StatusValid && ans.Status != StatusInvalid:
+		check.fail(ErrServer.WithMsgf("verifier returned status %q", ans.Status))
+	default:
+		check.Status = ans.Status
+		check.Record = ans.Record
+		check.CheckedAt = ans.CheckedAt
+		if check.CheckedAt.IsZero() {
+			check.CheckedAt = time.Now().UTC()
+		}
+		if ans.TaxID != nil && id.taxID != nil {
+			check.TaxID = ans.TaxID
+		}
 	}
-	if check == nil {
-		check = &Check{Source: v.Source()}
-		check.Fail(ErrServer.WithMessage("verifier returned no check"))
-	}
-	return id.check(check)
-}
-
-// check fills the identifier fields of a Check.
-func (id identifier) check(c *Check) *Check {
-	c.Path = id.Path
-	if id.taxID != nil && c.TaxID == nil {
-		c.TaxID = id.taxID
-	}
-	if id.identity != nil {
-		c.Identity = id.identity
-	}
-	return c
+	return check
 }
 
 // verifierFor returns the first verifier that supports the identifier, or

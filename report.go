@@ -28,7 +28,24 @@ type Verifier interface {
 	// Verify asks the register about the identifier. ErrInput covers input
 	// the register rejects, ErrServer, ErrNetwork and RateLimitedError cover
 	// a register that cannot answer.
-	Verify(ctx context.Context, id Identifier) (*Check, error)
+	Verify(ctx context.Context, id Identifier) (*Answer, error)
+}
+
+// Answer is what a register says about one identifier. The Client turns it
+// into a Check.
+type Answer struct {
+	// Status is valid or invalid. An empty status makes the check
+	// unverified.
+	Status Status
+
+	// Record is what the register holds for the identifier, when disclosed.
+	Record *Record
+
+	// TaxID is the tax identity as the register echoes it, when it does.
+	TaxID *tax.Identity
+
+	// CheckedAt is when the register answered. Zero means now.
+	CheckedAt time.Time
 }
 
 // Status is the outcome of one check.
@@ -46,7 +63,7 @@ const (
 	StatusUnsupported Status = "unsupported"
 
 	// StatusUnverified means the verifier could not get an answer from the
-	// register. The Check carries the failure in Error.
+	// register. The Check carries the failure in Failure.
 	StatusUnverified Status = "unverified"
 )
 
@@ -70,7 +87,8 @@ type Check struct {
 	// Source names the verifier that answered. Empty when unsupported.
 	Source cbc.Key `json:"source,omitempty"`
 
-	// CheckedAt is when the register answered. Zero when unsupported.
+	// CheckedAt is when the register answered. Absent when unsupported or
+	// unverified.
 	CheckedAt time.Time `json:"checked_at,omitzero"`
 
 	// Record is what the register holds for the identifier, when disclosed.
@@ -79,8 +97,8 @@ type Check struct {
 	// Mismatches lists the fields where the party disagrees with the record.
 	Mismatches []*Mismatch `json:"mismatches,omitempty"`
 
-	// Error is the register failure message when Status is unverified.
-	Error string `json:"error,omitempty"`
+	// Failure is the register failure message when Status is unverified.
+	Failure string `json:"failure,omitempty"`
 
 	err error
 }
@@ -90,13 +108,13 @@ func (c *Check) Err() error {
 	return c.err
 }
 
-// Fail marks the check as unverified with the register failure.
-func (c *Check) Fail(err error) {
+// fail marks the check as unverified with the register failure.
+func (c *Check) fail(err error) {
 	c.Status = StatusUnverified
 	c.err = err
-	c.Error = ""
+	c.Failure = ""
 	if err != nil {
-		c.Error = err.Error()
+		c.Failure = err.Error()
 	}
 }
 
@@ -111,9 +129,30 @@ type Record struct {
 	// Addresses lists the addresses the register holds in structured form.
 	Addresses []*org.Address `json:"addresses,omitempty"`
 
-	// Status is the standing of the party in the register.
-	Status cbc.Key `json:"status,omitempty"`
+	// Status is the standing of the party in the register. It does not
+	// change Check.Status: a recognised but dissolved company is valid with
+	// Status dissolved, and the consumer decides.
+	Status RecordStatus `json:"status,omitempty"`
 }
+
+// RecordStatus is the standing of a party in its register. Verifiers map
+// register values onto this vocabulary and leave it empty for values they
+// do not know.
+type RecordStatus string
+
+// Record statuses.
+const (
+	// RecordStatusActive means the register holds the party as active.
+	RecordStatusActive RecordStatus = "active"
+
+	// RecordStatusInactive means the register holds the party as inactive
+	// or suspended.
+	RecordStatusInactive RecordStatus = "inactive"
+
+	// RecordStatusDissolved means the register holds the party as dissolved
+	// or struck off.
+	RecordStatusDissolved RecordStatus = "dissolved"
+)
 
 // MismatchField names the kind of party field a mismatch is about.
 type MismatchField string
@@ -128,9 +167,6 @@ const (
 
 	// MismatchIdentity is a disagreement on the code of one identity.
 	MismatchIdentity MismatchField = "identity"
-
-	// MismatchAddress is a disagreement on one address field.
-	MismatchAddress MismatchField = "address"
 )
 
 // Mismatch is one field where the party disagrees with the record. Go
@@ -150,30 +186,25 @@ type Mismatch struct {
 	Register string `json:"register"`
 }
 
-// Verification is the report for one party: one Check per identifier, in
+// Report is the outcome for one party: one Check per identifier, in
 // document order.
-type Verification struct {
+type Report struct {
 	// Checks lists one outcome per identifier of the party.
 	Checks []*Check `json:"checks"`
-
-	party *org.Party
-}
-
-// NewVerification starts a report for the party. Patch reads the party, so a
-// report built without one cannot produce a patch.
-func NewVerification(party *org.Party) *Verification {
-	return &Verification{party: party}
 }
 
 // Valid reports whether every check that a verifier answered is valid. A
 // report with an unverified check is not valid. A report where no verifier
 // covered any identifier is not valid either: no identifier is verified.
-func (v *Verification) Valid() bool {
-	if v == nil {
+func (r *Report) Valid() bool {
+	if r == nil {
 		return false
 	}
 	verified := false
-	for _, c := range v.Checks {
+	for _, c := range r.Checks {
+		if c == nil {
+			continue
+		}
 		switch c.Status {
 		case StatusValid:
 			verified = true

@@ -40,7 +40,7 @@ type verifyOpts struct {
 // labelled pairs a report with the name of the party it describes.
 type labelled struct {
 	label  string
-	report *tin.Verification
+	report *tin.Report
 }
 
 func verify(o *rootOpts) *verifyOpts {
@@ -170,7 +170,7 @@ func printJSON(w io.Writer, reports []labelled) error {
 	if len(reports) == 1 {
 		return enc.Encode(reports[0].report)
 	}
-	out := make(map[string]*tin.Verification, len(reports))
+	out := make(map[string]*tin.Report, len(reports))
 	for _, r := range reports {
 		out[r.label] = r.report
 	}
@@ -202,8 +202,8 @@ func checkLine(c *tin.Check) string {
 	if c.Source != "" {
 		line += fmt.Sprintf(" (%s)", c.Source)
 	}
-	if c.Status == tin.StatusUnverified && c.Error != "" {
-		line += ": " + c.Error
+	if c.Status == tin.StatusUnverified && c.Failure != "" {
+		line += ": " + c.Failure
 	}
 	return line
 }

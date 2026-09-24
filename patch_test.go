@@ -46,10 +46,9 @@ func applyPatch(t *testing.T, party *org.Party, patch json.RawMessage) *org.Part
 	return out
 }
 
-func report(party *org.Party, checks ...*Check) *Verification {
-	v := NewVerification(party)
-	v.Checks = checks
-	return v
+// patchOf builds a report from the checks and patches the party with it.
+func patchOf(party *org.Party, p Policy, checks ...*Check) (json.RawMessage, error) {
+	return Patch(party, &Report{Checks: checks}, p)
 }
 
 func validCheck(rec *Record) *Check {
@@ -59,30 +58,43 @@ func validCheck(rec *Record) *Check {
 func TestPatch(t *testing.T) {
 	tid := &tax.Identity{Country: "DE", Code: "282741168"}
 
-	t.Run("report without party is an input error", func(t *testing.T) {
-		v := &Verification{Checks: []*Check{validCheck(&Record{Name: "ACME GMBH"})}}
-		_, err := v.Patch(Policy{})
+	t.Run("nil party or report is an input error", func(t *testing.T) {
+		rep := &Report{Checks: []*Check{validCheck(&Record{Name: "ACME GMBH"})}}
+		_, err := Patch(nil, rep, Policy{})
 		assert.ErrorIs(t, err, ErrInput)
-
-		var nilReport *Verification
-		_, err = nilReport.Patch(Policy{})
+		_, err = Patch(&org.Party{TaxID: tid}, nil, Policy{})
 		assert.ErrorIs(t, err, ErrInput)
 	})
 
 	t.Run("unknown policy values are input errors", func(t *testing.T) {
-		v := report(&org.Party{TaxID: tid}, validCheck(&Record{Name: "ACME GMBH"}))
-		_, err := v.Patch(Policy{Name: "shout"})
+		party := &org.Party{TaxID: tid}
+		rec := validCheck(&Record{Name: "ACME GMBH"})
+		_, err := patchOf(party, Policy{Name: "shout"}, rec)
 		assert.ErrorIs(t, err, ErrInput)
-		_, err = v.Patch(Policy{Identities: "merge"})
+		_, err = patchOf(party, Policy{Identities: "merge"}, rec)
 		assert.ErrorIs(t, err, ErrInput)
-		_, err = v.Patch(Policy{Addresses: "first"})
+		_, err = patchOf(party, Policy{Addresses: "first"}, rec)
 		assert.ErrorIs(t, err, ErrInput)
+	})
+
+	t.Run("empty policy values are the named defaults", func(t *testing.T) {
+		party := &org.Party{TaxID: tid, Addresses: []*org.Address{{Label: "Billing"}}}
+		rec := validCheck(&Record{
+			Name:       "ACME GMBH",
+			Identities: []*org.Identity{{Country: "DE", Type: "HRB", Code: "1"}},
+			Addresses:  []*org.Address{{Label: "Office"}},
+		})
+		zero, err := patchOf(party, Policy{}, rec)
+		require.NoError(t, err)
+		named, err := patchOf(party, Policy{Name: NamePolicyFill, Identities: IdentitiesPolicyAddMissing, Addresses: AddressPolicyNone}, rec)
+		require.NoError(t, err)
+		assert.JSONEq(t, string(named), string(zero))
+		assert.NotEqual(t, `{}`, string(zero))
 	})
 
 	t.Run("nothing to write is an empty object", func(t *testing.T) {
 		party := &org.Party{Name: "Acme GmbH", TaxID: tid}
-		v := report(party, validCheck(&Record{Name: "ACME GMBH"}))
-		patch, err := v.Patch(Policy{})
+		patch, err := patchOf(party, Policy{}, validCheck(&Record{Name: "ACME GMBH"}))
 		require.NoError(t, err)
 		assert.Equal(t, `{}`, string(patch))
 		assert.Equal(t, party, applyPatch(t, party, patch))
@@ -90,11 +102,10 @@ func TestPatch(t *testing.T) {
 
 	t.Run("invalid and unverified records are ignored", func(t *testing.T) {
 		party := &org.Party{TaxID: tid}
-		v := report(party,
+		patch, err := patchOf(party, Policy{},
 			&Check{Path: PathTaxID, Status: StatusInvalid, Record: &Record{Name: "WRONG"}},
 			&Check{Path: "/identities/0", Status: StatusUnverified, Record: &Record{Name: "WRONG"}},
 		)
-		patch, err := v.Patch(Policy{})
 		require.NoError(t, err)
 		assert.Equal(t, `{}`, string(patch))
 	})
@@ -104,7 +115,7 @@ func TestPatch(t *testing.T) {
 
 		t.Run("fill writes an empty name", func(t *testing.T) {
 			party := &org.Party{TaxID: tid}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{})
+			patch, err := patchOf(party, Policy{}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{"name":"ACME TRADING GMBH"}`, string(patch))
 			got := applyPatch(t, party, patch)
@@ -114,14 +125,14 @@ func TestPatch(t *testing.T) {
 
 		t.Run("fill keeps a present name", func(t *testing.T) {
 			party := &org.Party{Name: "Acme Trading", TaxID: tid}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Name: NamePolicyFill})
+			patch, err := patchOf(party, Policy{Name: NamePolicyFill}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
 
 		t.Run("prefer-register rewrites a different name", func(t *testing.T) {
 			party := &org.Party{Name: "Acme Trading", TaxID: tid}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Name: NamePolicyPreferRegister})
+			patch, err := patchOf(party, Policy{Name: NamePolicyPreferRegister}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{"name":"ACME TRADING GMBH"}`, string(patch))
 			assert.Equal(t, "ACME TRADING GMBH", applyPatch(t, party, patch).Name)
@@ -129,40 +140,39 @@ func TestPatch(t *testing.T) {
 
 		t.Run("prefer-register rewrites a case difference", func(t *testing.T) {
 			party := &org.Party{Name: "Acme Trading GmbH", TaxID: tid}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Name: NamePolicyPreferRegister})
+			patch, err := patchOf(party, Policy{Name: NamePolicyPreferRegister}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{"name":"ACME TRADING GMBH"}`, string(patch))
 		})
 
 		t.Run("prefer-register with an equal name writes nothing", func(t *testing.T) {
 			party := &org.Party{Name: "ACME TRADING GMBH", TaxID: tid}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Name: NamePolicyPreferRegister})
+			patch, err := patchOf(party, Policy{Name: NamePolicyPreferRegister}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
 
 		t.Run("prefer-register with a masked name writes nothing", func(t *testing.T) {
 			party := &org.Party{Name: "Acme Trading", TaxID: tid}
-			patch, err := report(party, validCheck(nil)).Patch(Policy{Name: NamePolicyPreferRegister})
+			patch, err := patchOf(party, Policy{Name: NamePolicyPreferRegister}, validCheck(nil))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
 
 		t.Run("keep never writes", func(t *testing.T) {
 			party := &org.Party{TaxID: tid}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Name: NamePolicyKeep})
+			patch, err := patchOf(party, Policy{Name: NamePolicyKeep}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
 
 		t.Run("first valid record with a name wins", func(t *testing.T) {
 			party := &org.Party{TaxID: tid}
-			v := report(party,
+			patch, err := patchOf(party, Policy{},
 				validCheck(nil),
 				&Check{Path: "/identities/0", Status: StatusValid, Record: &Record{Name: "FIRST"}},
 				&Check{Path: "/identities/1", Status: StatusValid, Record: &Record{Name: "SECOND"}},
 			)
-			patch, err := v.Patch(Policy{})
 			require.NoError(t, err)
 			assert.Equal(t, `{"name":"FIRST"}`, string(patch))
 		})
@@ -179,7 +189,7 @@ func TestPatch(t *testing.T) {
 				Name:       "Acme Ltd",
 				Identities: []*org.Identity{{Country: "GB", Type: "CRN", Code: "00445790"}},
 			}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{})
+			patch, err := patchOf(party, Policy{}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{"identities":[{"country":"GB","type":"CRN","code":"00445790"},{"country":"GB","type":"UTR","code":"1234567890"}]}`, string(patch))
 			got := applyPatch(t, party, patch)
@@ -190,7 +200,7 @@ func TestPatch(t *testing.T) {
 
 		t.Run("add-missing fills an empty list", func(t *testing.T) {
 			party := &org.Party{Name: "Acme Ltd"}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Identities: IdentitiesPolicyAddMissing})
+			patch, err := patchOf(party, Policy{Identities: IdentitiesPolicyAddMissing}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{"identities":[{"country":"GB","type":"CRN","code":"00445790"},{"country":"GB","type":"UTR","code":"1234567890"}]}`, string(patch))
 			assert.Len(t, applyPatch(t, party, patch).Identities, 2)
@@ -201,7 +211,7 @@ func TestPatch(t *testing.T) {
 				{Country: "GB", Type: "CRN", Code: "00445790"},
 				{Country: "GB", Type: "UTR", Code: "0000000000"},
 			}}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{})
+			patch, err := patchOf(party, Policy{}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
@@ -209,14 +219,14 @@ func TestPatch(t *testing.T) {
 		t.Run("a different country is not the same kind", func(t *testing.T) {
 			party := &org.Party{Identities: []*org.Identity{{Country: "IE", Type: "CRN", Code: "123"}}}
 			single := &Record{Identities: rec.Identities[:1]}
-			patch, err := report(party, validCheck(single)).Patch(Policy{})
+			patch, err := patchOf(party, Policy{}, validCheck(single))
 			require.NoError(t, err)
 			assert.Equal(t, `{"identities":[{"country":"IE","type":"CRN","code":"123"},{"country":"GB","type":"CRN","code":"00445790"}]}`, string(patch))
 		})
 
 		t.Run("keep never writes", func(t *testing.T) {
 			party := &org.Party{}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Identities: IdentitiesPolicyKeep})
+			patch, err := patchOf(party, Policy{Identities: IdentitiesPolicyKeep}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
@@ -229,14 +239,14 @@ func TestPatch(t *testing.T) {
 
 		t.Run("none writes nothing", func(t *testing.T) {
 			party := &org.Party{Addresses: []*org.Address{billing}}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{})
+			patch, err := patchOf(party, Policy{}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
 
 		t.Run("append adds alongside as a full array", func(t *testing.T) {
 			party := &org.Party{Addresses: []*org.Address{billing}}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Addresses: AddressPolicyAppend})
+			patch, err := patchOf(party, Policy{Addresses: AddressPolicyAppend}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{"addresses":[{"label":"Billing","street":"Other St.","country":"DE"},{"label":"Registered Office","street":"Musterstr.","locality":"Berlin","country":"DE"}]}`, string(patch))
 			got := applyPatch(t, party, patch)
@@ -246,7 +256,7 @@ func TestPatch(t *testing.T) {
 
 		t.Run("append skips a present label", func(t *testing.T) {
 			party := &org.Party{Addresses: []*org.Address{{Label: "Registered Office", Street: "Old St."}}}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Addresses: AddressPolicyAppend})
+			patch, err := patchOf(party, Policy{Addresses: AddressPolicyAppend}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
@@ -254,14 +264,14 @@ func TestPatch(t *testing.T) {
 		t.Run("append compares unlabelled addresses field by field", func(t *testing.T) {
 			plain := &org.Address{Street: "Musterstr.", Locality: "Berlin", Country: "DE"}
 			party := &org.Party{Addresses: []*org.Address{{Street: "Musterstr.", Locality: "Berlin", Country: "DE"}}}
-			patch, err := report(party, validCheck(&Record{Addresses: []*org.Address{plain}})).Patch(Policy{Addresses: AddressPolicyAppend})
+			patch, err := patchOf(party, Policy{Addresses: AddressPolicyAppend}, validCheck(&Record{Addresses: []*org.Address{plain}}))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
 
 		t.Run("replace writes the record addresses", func(t *testing.T) {
 			party := &org.Party{Addresses: []*org.Address{billing}}
-			patch, err := report(party, validCheck(rec)).Patch(Policy{Addresses: AddressPolicyReplace})
+			patch, err := patchOf(party, Policy{Addresses: AddressPolicyReplace}, validCheck(rec))
 			require.NoError(t, err)
 			assert.Equal(t, `{"addresses":[{"label":"Registered Office","street":"Musterstr.","locality":"Berlin","country":"DE"}]}`, string(patch))
 			got := applyPatch(t, party, patch)
@@ -271,7 +281,7 @@ func TestPatch(t *testing.T) {
 
 		t.Run("replace without record addresses writes nothing", func(t *testing.T) {
 			party := &org.Party{Addresses: []*org.Address{billing}}
-			patch, err := report(party, validCheck(&Record{Name: "ACME"})).Patch(Policy{Name: NamePolicyKeep, Addresses: AddressPolicyReplace})
+			patch, err := patchOf(party, Policy{Name: NamePolicyKeep, Addresses: AddressPolicyReplace}, validCheck(&Record{Name: "ACME"}))
 			require.NoError(t, err)
 			assert.Equal(t, `{}`, string(patch))
 		})
@@ -287,7 +297,7 @@ func TestPatch(t *testing.T) {
 			Identities: []*org.Identity{{Country: "DE", Type: "EORI", Code: "DE123"}},
 			Addresses:  []*org.Address{{Label: "Registered Office", Locality: "Berlin", Country: "DE"}},
 		}
-		patch, err := report(party, validCheck(rec)).Patch(Policy{Addresses: AddressPolicyAppend})
+		patch, err := patchOf(party, Policy{Addresses: AddressPolicyAppend}, validCheck(rec))
 		require.NoError(t, err)
 		assert.Equal(t, `{"addresses":[{"label":"Registered Office","locality":"Berlin","country":"DE"}],"identities":[{"country":"DE","type":"HRB","code":"12345"},{"country":"DE","type":"EORI","code":"DE123"}],"name":"ACME GMBH"}`, string(patch))
 		got := applyPatch(t, party, patch)

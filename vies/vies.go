@@ -148,27 +148,25 @@ func (a *Verifier) Supports(id tin.Identifier) bool {
 	return id.Type == "" && id.Key == "" && id.Country.Code().In(countryCodes...)
 }
 
-// Verify checks the identifier against VIES. An unregistered number is a
-// Check with StatusInvalid, not an error.
-func (a *Verifier) Verify(ctx context.Context, id tin.Identifier) (*tin.Check, error) {
+// Verify checks the identifier against VIES. An unregistered number is an
+// Answer with StatusInvalid, not an error.
+func (a *Verifier) Verify(ctx context.Context, id tin.Identifier) (*tin.Answer, error) {
 	out, err := a.checkVat(ctx, id.Country, id.Code)
 	if err != nil {
 		return nil, err
 	}
-	check := &tin.Check{
-		Path:      id.Path,
-		TaxID:     confirmedTaxID(id.Country, id.Code, out),
+	ans := &tin.Answer{
 		Status:    tin.StatusInvalid,
-		Source:    Source,
+		TaxID:     confirmedTaxID(id.Country, id.Code, out),
 		CheckedAt: time.Now().UTC(),
 	}
 	if *out.Valid {
-		check.Status = tin.StatusValid
+		ans.Status = tin.StatusValid
 	}
 	if name := unmask(out.Name); name != "" {
-		check.Record = &tin.Record{Name: name}
+		ans.Record = &tin.Record{Name: name}
 	}
-	return check, nil
+	return ans, nil
 }
 
 // checkVat posts the number to VIES and decodes the answer. The response
@@ -225,7 +223,7 @@ func confirmedTaxID(country l10n.TaxCountryCode, code cbc.Code, resp *checkVatRe
 	return out
 }
 
-// statusError maps a non-2xx response onto the api error taxonomy.
+// statusError maps a non-2xx response onto the tin error taxonomy.
 func statusError(resp *resty.Response) error {
 	code := resp.StatusCode()
 	status := strconv.Itoa(code)

@@ -20,10 +20,6 @@ import (
 // is reserved for failures below HTTP: dial, timeout, and unreadable bodies.
 
 var (
-	// ErrNotSupported is reserved for callers that need to reject an
-	// identifier no verifier covers. The Client reports StatusUnsupported.
-	ErrNotSupported = NewError("not-supported")
-
 	// ErrNetwork wraps transport failures: dial errors, timeouts, and
 	// responses that could not be decoded. It says nothing about the identifier,
 	// only that the request failed.

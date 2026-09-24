@@ -313,16 +313,13 @@ func TestVerifier(t *testing.T) {
 		before := time.Now().Add(-time.Second)
 		check, err := a.Verify(context.Background(), id)
 		require.NoError(t, err)
-		assert.Equal(t, tin.PathTaxID, check.Path)
 		assert.Equal(t, tin.StatusValid, check.Status)
-		assert.Equal(t, Source, check.Source)
 		assert.True(t, check.CheckedAt.After(before))
 		require.NotNil(t, check.Record)
 		assert.Equal(t, "ACME GMBH", check.Record.Name)
 		require.NotNil(t, check.TaxID)
 		assert.Equal(t, "DE", check.TaxID.Country.String())
 		assert.Equal(t, "282741168", check.TaxID.Code.String())
-		assert.Empty(t, check.Mismatches, "verifiers do not compute mismatches")
 	})
 
 	t.Run("valid with masked name has no record", func(t *testing.T) {

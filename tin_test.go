@@ -18,7 +18,7 @@ import (
 type fakeVerifier struct {
 	source   cbc.Key
 	supports func(Identifier) bool
-	checks   map[cbc.Code]*Check
+	checks   map[cbc.Code]*Answer
 	errs     map[cbc.Code]error
 	calls    []Identifier
 }
@@ -32,7 +32,7 @@ func (f *fakeVerifier) Supports(id Identifier) bool {
 	return f.supports(id)
 }
 
-func (f *fakeVerifier) Verify(_ context.Context, id Identifier) (*Check, error) {
+func (f *fakeVerifier) Verify(_ context.Context, id Identifier) (*Answer, error) {
 	f.calls = append(f.calls, id)
 	if err, ok := f.errs[id.Code]; ok {
 		return nil, err
@@ -41,8 +41,15 @@ func (f *fakeVerifier) Verify(_ context.Context, id Identifier) (*Check, error) 
 		cp := *c
 		return &cp, nil
 	}
-	return &Check{Status: StatusInvalid, Source: f.source, CheckedAt: time.Now()}, nil
+	return &Answer{Status: StatusInvalid, CheckedAt: time.Now()}, nil
 }
+
+// nilVerifier answers with a nil Answer and no error.
+type nilVerifier struct{}
+
+func (*nilVerifier) Source() cbc.Key                                     { return "nil" }
+func (*nilVerifier) Supports(Identifier) bool                            { return true }
+func (*nilVerifier) Verify(context.Context, Identifier) (*Answer, error) { return nil, nil }
 
 // taxOnly restricts a fake verifier to tax identities of the given countries.
 func taxOnly(countries ...l10n.TaxCountryCode) func(Identifier) bool {
@@ -56,8 +63,8 @@ func typeOnly(typ cbc.Code) func(Identifier) bool {
 	return func(id Identifier) bool { return id.Type == typ }
 }
 
-func valid(source cbc.Key, rec *Record) *Check {
-	return &Check{Status: StatusValid, Source: source, CheckedAt: time.Now(), Record: rec}
+func valid(_ cbc.Key, rec *Record) *Answer {
+	return &Answer{Status: StatusValid, CheckedAt: time.Now(), Record: rec}
 }
 
 func TestVerify(t *testing.T) {
@@ -79,7 +86,7 @@ func TestVerify(t *testing.T) {
 		fake := &fakeVerifier{
 			source:   "vies",
 			supports: taxOnly("DE"),
-			checks: map[cbc.Code]*Check{
+			checks: map[cbc.Code]*Answer{
 				"282741168": valid("vies", &Record{Name: "ACME TRADING GMBH"}),
 			},
 		}
@@ -115,7 +122,7 @@ func TestVerify(t *testing.T) {
 	})
 
 	t.Run("normalizes before calling the verifier and keeps the party", func(t *testing.T) {
-		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Check{"282741168": valid("vies", nil)}}
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": valid("vies", nil)}}
 		party := &org.Party{TaxID: &tax.Identity{Country: "DE", Code: "de 282-741-168"}}
 		report, err := New(fake).Verify(ctx, party)
 		require.NoError(t, err)
@@ -137,7 +144,7 @@ func TestVerify(t *testing.T) {
 		fake := &fakeVerifier{
 			source: "vies",
 			errs:   map[cbc.Code]error{"282741168": ErrServer.WithCode("500").WithMessage("MS_UNAVAILABLE")},
-			checks: map[cbc.Code]*Check{"12345": valid("vies", nil)},
+			checks: map[cbc.Code]*Answer{"12345": valid("vies", nil)},
 		}
 		party := &org.Party{
 			TaxID:      &tax.Identity{Country: "DE", Code: "282741168"},
@@ -150,12 +157,41 @@ func TestVerify(t *testing.T) {
 		c := report.Checks[0]
 		assert.Equal(t, StatusUnverified, c.Status)
 		assert.Equal(t, cbc.Key("vies"), c.Source)
-		assert.Equal(t, "server: 500: MS_UNAVAILABLE", c.Error)
+		assert.Equal(t, "server: 500: MS_UNAVAILABLE", c.Failure)
+		assert.True(t, c.CheckedAt.IsZero())
 		assert.True(t, errors.Is(c.Err(), ErrServer))
 		require.NotNil(t, c.TaxID)
 
 		assert.Equal(t, StatusValid, report.Checks[1].Status)
 		assert.False(t, report.Valid())
+	})
+
+	t.Run("empty or unknown answer status is unverified", func(t *testing.T) {
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": {}, "111111125": {Status: "maybe"}}}
+		c := New(fake)
+		check, err := c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
+		require.NoError(t, err)
+		assert.Equal(t, StatusUnverified, check.Status)
+		assert.Contains(t, check.Failure, "verifier returned status")
+		assert.True(t, errors.Is(check.Err(), ErrServer))
+		check, err = c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "111111125"})
+		require.NoError(t, err)
+		assert.Equal(t, StatusUnverified, check.Status)
+	})
+
+	t.Run("nil answer is unverified", func(t *testing.T) {
+		c := New(&nilVerifier{})
+		check, err := c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
+		require.NoError(t, err)
+		assert.Equal(t, StatusUnverified, check.Status)
+		assert.Equal(t, "server: verifier returned no answer", check.Failure)
+	})
+
+	t.Run("zero checked_at is filled with now", func(t *testing.T) {
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": {Status: StatusValid}}}
+		check, err := New(fake).VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
+		require.NoError(t, err)
+		assert.False(t, check.CheckedAt.IsZero())
 	})
 
 	t.Run("rate limit is reachable through Err", func(t *testing.T) {
@@ -168,8 +204,8 @@ func TestVerify(t *testing.T) {
 	})
 
 	t.Run("first supporting verifier wins", func(t *testing.T) {
-		first := &fakeVerifier{source: "vies", supports: taxOnly("DE"), checks: map[cbc.Code]*Check{"282741168": valid("vies", nil)}}
-		second := &fakeVerifier{source: "other", checks: map[cbc.Code]*Check{"282741168": valid("other", nil), "12345": valid("other", nil)}}
+		first := &fakeVerifier{source: "vies", supports: taxOnly("DE"), checks: map[cbc.Code]*Answer{"282741168": valid("vies", nil)}}
+		second := &fakeVerifier{source: "other", checks: map[cbc.Code]*Answer{"282741168": valid("other", nil), "12345": valid("other", nil)}}
 		party := &org.Party{
 			TaxID:      &tax.Identity{Country: "DE", Code: "282741168"},
 			Identities: []*org.Identity{{Country: "DE", Type: "HRB", Code: "12345"}},
@@ -186,7 +222,7 @@ func TestVerify(t *testing.T) {
 		reg := &fakeVerifier{
 			source:   "companies",
 			supports: typeOnly("CRN"),
-			checks: map[cbc.Code]*Check{
+			checks: map[cbc.Code]*Answer{
 				"00445790": valid("companies", &Record{
 					Name: "ACME LTD",
 					Identities: []*org.Identity{
@@ -220,7 +256,7 @@ func TestVerify(t *testing.T) {
 	t.Run("tax id echo mismatch", func(t *testing.T) {
 		echo := valid("vies", nil)
 		echo.TaxID = &tax.Identity{Country: "DE", Code: "999999999"}
-		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Check{"282741168": echo}}
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": echo}}
 		report, err := New(fake).Verify(ctx, &org.Party{TaxID: &tax.Identity{Country: "DE", Code: "282741168"}})
 		require.NoError(t, err)
 		c := report.Checks[0]
@@ -229,14 +265,14 @@ func TestVerify(t *testing.T) {
 	})
 
 	t.Run("matching name is not a mismatch", func(t *testing.T) {
-		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Check{"282741168": valid("vies", &Record{Name: "ACME GMBH"})}}
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": valid("vies", &Record{Name: "ACME GMBH"})}}
 		report, err := New(fake).Verify(ctx, &org.Party{Name: "Acme GmbH", TaxID: &tax.Identity{Country: "DE", Code: "282741168"}})
 		require.NoError(t, err)
 		assert.Empty(t, report.Checks[0].Mismatches)
 	})
 
 	t.Run("empty party name is not a mismatch", func(t *testing.T) {
-		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Check{"282741168": valid("vies", &Record{Name: "ACME GMBH"})}}
+		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": valid("vies", &Record{Name: "ACME GMBH"})}}
 		report, err := New(fake).Verify(ctx, &org.Party{TaxID: &tax.Identity{Country: "DE", Code: "282741168"}})
 		require.NoError(t, err)
 		assert.Empty(t, report.Checks[0].Mismatches)
@@ -245,7 +281,7 @@ func TestVerify(t *testing.T) {
 
 func TestVerifyTaxID(t *testing.T) {
 	ctx := context.Background()
-	fake := &fakeVerifier{source: "vies", supports: taxOnly("DE"), checks: map[cbc.Code]*Check{"282741168": valid("vies", &Record{Name: "ACME GMBH"})}}
+	fake := &fakeVerifier{source: "vies", supports: taxOnly("DE"), checks: map[cbc.Code]*Answer{"282741168": valid("vies", &Record{Name: "ACME GMBH"})}}
 	c := New(fake)
 
 	t.Run("valid", func(t *testing.T) {
@@ -274,7 +310,7 @@ func TestVerifyTaxID(t *testing.T) {
 
 func TestVerifyIdentity(t *testing.T) {
 	ctx := context.Background()
-	reg := &fakeVerifier{source: "companies", supports: typeOnly("CRN"), checks: map[cbc.Code]*Check{"00445790": valid("companies", nil)}}
+	reg := &fakeVerifier{source: "companies", supports: typeOnly("CRN"), checks: map[cbc.Code]*Answer{"00445790": valid("companies", nil)}}
 	c := New(reg)
 
 	t.Run("valid", func(t *testing.T) {
@@ -318,8 +354,8 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("argument order is routing order", func(t *testing.T) {
-		first := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Check{"282741168": valid("vies", nil)}}
-		second := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Check{"282741168": valid("vies", nil)}}
+		first := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": valid("vies", nil)}}
+		second := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": valid("vies", nil)}}
 		c := New(first, second)
 		require.Len(t, c.verifiers, 2, "a shared source keeps both")
 		_, err := c.VerifyTaxID(context.Background(), &tax.Identity{Country: "DE", Code: "282741168"})

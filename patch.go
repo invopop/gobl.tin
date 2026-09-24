@@ -21,7 +21,7 @@ import (
 // NamePolicy decides when the register's name is written.
 type NamePolicy string
 
-// Name policies. The empty value means NamePolicyFill.
+// Name policies.
 const (
 	// NamePolicyFill writes the register's name only when the party has
 	// none. It is the default: registers store names upper cased and with
@@ -40,7 +40,7 @@ const (
 // IdentitiesPolicy decides when the register's identities are written.
 type IdentitiesPolicy string
 
-// Identities policies. The empty value means IdentitiesPolicyAddMissing.
+// Identities policies.
 const (
 	// IdentitiesPolicyAddMissing appends record identities of a country,
 	// key and type the party lacks. An identity of the same country, key
@@ -54,12 +54,12 @@ const (
 // AddressPolicy decides when the register's addresses are written.
 type AddressPolicy string
 
-// Address policies. The empty value means AddressPolicyNone.
+// Address policies.
 const (
 	// AddressPolicyNone never writes addresses. It is the default: an
 	// invoice address is usually the trading address, not the registered
 	// office.
-	AddressPolicyNone AddressPolicy = ""
+	AddressPolicyNone AddressPolicy = "none"
 
 	// AddressPolicyAppend adds record addresses the party lacks. Two
 	// addresses are the same when their labels match, or when they are
@@ -72,20 +72,26 @@ const (
 )
 
 // Policy decides what a Patch may write. The zero value fills an empty name,
-// adds missing identities and leaves addresses alone.
+// adds missing identities and leaves addresses alone: the empty string is an
+// alias for the default of every field, NamePolicyFill,
+// IdentitiesPolicyAddMissing and AddressPolicyNone.
 type Policy struct {
 	Name       NamePolicy
 	Identities IdentitiesPolicy
 	Addresses  AddressPolicy
 }
 
-// Patch builds a JSON merge patch on the party under the policy. A report
-// without a party, or an unknown policy value, is an input error. A patch
-// with nothing to write is "{}".
-func (v *Verification) Patch(p Policy) (json.RawMessage, error) {
-	if v == nil || v.party == nil {
-		return nil, ErrInput.WithMessage("report has no party")
+// Patch builds a JSON merge patch on the party from its report under the
+// policy. A nil party or report, or an unknown policy value, is an input
+// error. A patch with nothing to write is "{}".
+func Patch(party *org.Party, report *Report, p Policy) (json.RawMessage, error) {
+	if party == nil {
+		return nil, ErrInput.WithMessage("no party provided")
 	}
+	if report == nil {
+		return nil, ErrInput.WithMessage("no report provided")
+	}
+	v := &patcher{party: party, report: report}
 	patch := map[string]any{}
 
 	name, err := v.patchName(p.Name)
@@ -115,9 +121,15 @@ func (v *Verification) Patch(p Policy) (json.RawMessage, error) {
 	return json.Marshal(patch)
 }
 
+// patcher pairs a party with its report while a patch is built.
+type patcher struct {
+	party  *org.Party
+	report *Report
+}
+
 // patchName returns the name to write, or empty when the policy writes
 // nothing.
-func (v *Verification) patchName(p NamePolicy) (string, error) {
+func (v *patcher) patchName(p NamePolicy) (string, error) {
 	name := v.recordName()
 	switch p {
 	case "", NamePolicyFill:
@@ -139,7 +151,7 @@ func (v *Verification) patchName(p NamePolicy) (string, error) {
 
 // patchIdentities returns the full identities array to write, or nil when
 // the policy writes nothing.
-func (v *Verification) patchIdentities(p IdentitiesPolicy) ([]*org.Identity, error) {
+func (v *patcher) patchIdentities(p IdentitiesPolicy) ([]*org.Identity, error) {
 	switch p {
 	case "", IdentitiesPolicyAddMissing:
 	case IdentitiesPolicyKeep:
@@ -169,10 +181,10 @@ func (v *Verification) patchIdentities(p IdentitiesPolicy) ([]*org.Identity, err
 
 // patchAddresses returns the full addresses array to write, or nil when the
 // policy writes nothing.
-func (v *Verification) patchAddresses(p AddressPolicy) ([]*org.Address, error) {
+func (v *patcher) patchAddresses(p AddressPolicy) ([]*org.Address, error) {
 	recorded := v.recordAddresses()
 	switch p {
-	case AddressPolicyNone:
+	case "", AddressPolicyNone:
 		return nil, nil
 	case AddressPolicyReplace:
 		if len(recorded) == 0 {
@@ -203,7 +215,7 @@ func (v *Verification) patchAddresses(p AddressPolicy) ([]*org.Address, error) {
 }
 
 // recordName returns the name of the first valid record that has one.
-func (v *Verification) recordName() string {
+func (v *patcher) recordName() string {
 	for _, c := range v.validRecords() {
 		if c.Name != "" {
 			return c.Name
@@ -214,7 +226,7 @@ func (v *Verification) recordName() string {
 
 // recordIdentities returns the identities of the first valid record that
 // has any.
-func (v *Verification) recordIdentities() []*org.Identity {
+func (v *patcher) recordIdentities() []*org.Identity {
 	for _, c := range v.validRecords() {
 		if len(c.Identities) > 0 {
 			return c.Identities
@@ -225,7 +237,7 @@ func (v *Verification) recordIdentities() []*org.Identity {
 
 // recordAddresses returns the addresses of the first valid record that has
 // any.
-func (v *Verification) recordAddresses() []*org.Address {
+func (v *patcher) recordAddresses() []*org.Address {
 	for _, c := range v.validRecords() {
 		if len(c.Addresses) > 0 {
 			return c.Addresses
@@ -235,9 +247,9 @@ func (v *Verification) recordAddresses() []*org.Address {
 }
 
 // validRecords lists the records behind valid checks, in report order.
-func (v *Verification) validRecords() []*Record {
+func (v *patcher) validRecords() []*Record {
 	var out []*Record
-	for _, c := range v.Checks {
+	for _, c := range v.report.Checks {
 		if c != nil && c.Status == StatusValid && c.Record != nil {
 			out = append(out, c.Record)
 		}

@@ -17,7 +17,7 @@ import (
 // fakeVIES stands in for the VIES verifier with canned answers by code, so
 // that the command never dials the register.
 type fakeVIES struct {
-	checks map[cbc.Code]*tin.Check
+	checks map[cbc.Code]*tin.Answer
 	errs   map[cbc.Code]error
 }
 
@@ -27,7 +27,7 @@ func (f *fakeVIES) Supports(id tin.Identifier) bool {
 	return id.Type == "" && id.Key == ""
 }
 
-func (f *fakeVIES) Verify(_ context.Context, id tin.Identifier) (*tin.Check, error) {
+func (f *fakeVIES) Verify(_ context.Context, id tin.Identifier) (*tin.Answer, error) {
 	if err, ok := f.errs[id.Code]; ok {
 		return nil, err
 	}
@@ -35,13 +35,13 @@ func (f *fakeVIES) Verify(_ context.Context, id tin.Identifier) (*tin.Check, err
 		cp := *c
 		return &cp, nil
 	}
-	return &tin.Check{Status: tin.StatusInvalid, Source: "vies", CheckedAt: time.Now()}, nil
+	return &tin.Answer{Status: tin.StatusInvalid, CheckedAt: time.Now()}, nil
 }
 
 var checkedAt = time.Date(2026, 9, 24, 9, 12, 0, 0, time.UTC)
 
-func validCheck(name string) *tin.Check {
-	c := &tin.Check{Status: tin.StatusValid, Source: "vies", CheckedAt: checkedAt}
+func validCheck(name string) *tin.Answer {
+	c := &tin.Answer{Status: tin.StatusValid, CheckedAt: checkedAt}
 	if name != "" {
 		c.Record = &tin.Record{Name: name}
 	}
@@ -69,7 +69,7 @@ func runVerify(t *testing.T, fake *fakeVIES, args ...string) (string, error) {
 func TestVerifyCommand(t *testing.T) {
 	// The customer of invoice-valid.json is 282741168 and the supplier is
 	// 111111125; party.json carries 282741168 and an HRB identity.
-	allValid := &fakeVIES{checks: map[cbc.Code]*tin.Check{
+	allValid := &fakeVIES{checks: map[cbc.Code]*tin.Answer{
 		"282741168": validCheck("ACME TRADING GMBH"),
 		"111111125": validCheck(""),
 	}}
@@ -106,7 +106,7 @@ func TestVerifyCommand(t *testing.T) {
 	})
 
 	t.Run("invalid check exits non-zero after printing", func(t *testing.T) {
-		fake := &fakeVIES{checks: map[cbc.Code]*tin.Check{"111111125": validCheck("")}}
+		fake := &fakeVIES{checks: map[cbc.Code]*tin.Answer{"111111125": validCheck("")}}
 		out, err := runVerify(t, fake, "../../test/data/invoice-valid.json", "--party", "both")
 		assert.ErrorIs(t, err, errNotValid)
 		assert.Equal(t, "customer:\n"+
