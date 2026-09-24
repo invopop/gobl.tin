@@ -7,19 +7,20 @@ import (
 	"time"
 )
 
-// ABOUT: An invalid TIN is not represented here at all; it is a Result with
-// Valid false. Errors cover only the cases where the registry could not give
-// an answer. Callers match on the sentinels with errors.Is and on
+// ABOUT: An invalid identifier is not represented here at all; it is a Check
+// with StatusInvalid. Errors cover only the cases where the register could
+// not give an answer. Callers match on the sentinels with errors.Is and on
 // RateLimitedError with errors.As. Errors that come from an HTTP response
 // carry the status via Code(), so callers can distinguish structurally.
 //
-// Registry clients map HTTP statuses as follows: 400 is ErrInput, 429 is
+// Verifiers map HTTP statuses as follows: 400 is ErrInput, 429 is
 // RateLimitedError, and every other unexpected status, including edge
 // responses such as 403, is ErrServer with the status as its code. ErrNetwork
 // is reserved for failures below HTTP: dial, timeout, and unreadable bodies.
 
 var (
-	// ErrNotSupported is returned when no registry covers the country.
+	// ErrNotSupported is reserved for callers that need to reject an
+	// identifier no verifier covers. The Client reports StatusUnsupported.
 	ErrNotSupported = NewError("not-supported")
 
 	// ErrNetwork wraps transport failures: dial errors, timeouts, and
@@ -27,17 +28,17 @@ var (
 	// only that the request failed.
 	ErrNetwork = NewError("network")
 
-	// ErrServer is returned when the registry answered with an unexpected
+	// ErrServer is returned when the register answered with an unexpected
 	// status. The HTTP status is available via Code().
 	ErrServer = NewError("server")
 
 	// ErrInput is returned when the input is malformed or incomplete: a
-	// missing tax ID, an empty code, or a request the registry rejected as
+	// missing tax ID, an empty code, or a request the register rejected as
 	// badly formed.
 	ErrInput = NewError("input")
 )
 
-// RateLimitedError reports that the registry's request budget is exhausted,
+// RateLimitedError reports that the register's request budget is exhausted,
 // and how long to wait, so a caller can requeue with a precise delay instead
 // of a blind backoff.
 type RateLimitedError struct {

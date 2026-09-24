@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/invopop/gobl.tin/api"
-	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,50 +73,21 @@ func serve(t *testing.T, status int, body string, header http.Header) *API {
 	return New(WithBaseURL(srv.URL))
 }
 
-func TestLookupTIN(t *testing.T) {
-	tid := &tax.Identity{Country: "ES", Code: "B85905495"}
+func TestVerifyTransport(t *testing.T) {
+	tid := api.Identifier{Path: api.PathTaxID, Country: "ES", Code: "B85905495"}
 
-	t.Run("valid with masked details", func(t *testing.T) {
-		a := serve(t, http.StatusOK, viesValidBody, nil)
-		res, err := a.LookupTIN(context.Background(), tid)
-		require.NoError(t, err)
-		assert.True(t, res.Valid)
-		assert.Empty(t, res.Name)
-		assert.Empty(t, res.Address)
-		assert.Equal(t, Source, res.Source)
-	})
-
-	t.Run("valid with disclosed details", func(t *testing.T) {
-		a := serve(t, http.StatusOK, viesValidNamedBody, nil)
-		res, err := a.LookupTIN(context.Background(), tid)
-		require.NoError(t, err)
-		assert.True(t, res.Valid)
-		assert.Equal(t, "ACME GMBH", res.Name)
-		assert.Nil(t, res.Address, "VIES has no structured address")
-		require.NotNil(t, res.TaxID)
-		assert.Equal(t, "DE", res.TaxID.Country.String(), "echoed by the response")
-		assert.Equal(t, "282741168", res.TaxID.Code.String())
-	})
-
-	t.Run("missing echo falls back to the request identity", func(t *testing.T) {
+	t.Run("missing echo falls back to the request identifier", func(t *testing.T) {
 		a := serve(t, http.StatusOK, `{"valid": true, "name": "ACME GMBH"}`, nil)
-		res, err := a.LookupTIN(context.Background(), tid)
+		res, err := a.Verify(context.Background(), tid)
 		require.NoError(t, err)
 		require.NotNil(t, res.TaxID)
 		assert.Equal(t, tid.Country, res.TaxID.Country)
 		assert.Equal(t, tid.Code, res.TaxID.Code)
 	})
 
-	t.Run("invalid number is not an error", func(t *testing.T) {
-		a := serve(t, http.StatusOK, viesInvalidBody, nil)
-		res, err := a.LookupTIN(context.Background(), tid)
-		require.NoError(t, err)
-		assert.False(t, res.Valid)
-	})
-
 	t.Run("bad request maps to input error", func(t *testing.T) {
 		a := serve(t, http.StatusBadRequest, `{"message": "Invalid VAT number format"}`, nil)
-		res, err := a.LookupTIN(context.Background(), tid)
+		res, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		assert.Nil(t, res)
 		assert.ErrorIs(t, err, api.ErrInput)
@@ -129,7 +99,7 @@ func TestLookupTIN(t *testing.T) {
 
 	t.Run("server error maps to server error with code", func(t *testing.T) {
 		a := serve(t, http.StatusInternalServerError, `{"message": "MS_UNAVAILABLE"}`, nil)
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, api.ErrServer)
 		assert.NotErrorIs(t, err, api.ErrNetwork)
@@ -141,7 +111,7 @@ func TestLookupTIN(t *testing.T) {
 
 	t.Run("failure with unreadable body", func(t *testing.T) {
 		a := serve(t, http.StatusBadGateway, `<html>bad gateway</html>`, nil)
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, api.ErrServer)
 		var e *api.Error
@@ -152,7 +122,7 @@ func TestLookupTIN(t *testing.T) {
 
 	t.Run("rate limited with Retry-After", func(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"30"}})
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		var rl *api.RateLimitedError
 		require.True(t, errors.As(err, &rl))
@@ -161,7 +131,7 @@ func TestLookupTIN(t *testing.T) {
 
 	t.Run("rate limited with Retry-After zero", func(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"0"}})
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		var rl *api.RateLimitedError
 		require.True(t, errors.As(err, &rl))
@@ -171,7 +141,7 @@ func TestLookupTIN(t *testing.T) {
 	t.Run("rate limited with Retry-After HTTP date", func(t *testing.T) {
 		when := time.Now().Add(90 * time.Second).UTC().Format(http.TimeFormat)
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {when}})
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		var rl *api.RateLimitedError
 		require.True(t, errors.As(err, &rl))
@@ -182,7 +152,7 @@ func TestLookupTIN(t *testing.T) {
 	t.Run("rate limited with Retry-After date in the past", func(t *testing.T) {
 		when := time.Now().Add(-time.Hour).UTC().Format(http.TimeFormat)
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {when}})
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		var rl *api.RateLimitedError
 		require.True(t, errors.As(err, &rl))
@@ -191,7 +161,7 @@ func TestLookupTIN(t *testing.T) {
 
 	t.Run("rate limited without Retry-After", func(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, nil)
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		var rl *api.RateLimitedError
 		require.True(t, errors.As(err, &rl))
@@ -201,7 +171,7 @@ func TestLookupTIN(t *testing.T) {
 	t.Run("missing validity field is not an answer", func(t *testing.T) {
 		for _, body := range []string{`{}`, `null`, `{"name": "ACME GMBH"}`} {
 			a := serve(t, http.StatusOK, body, nil)
-			res, err := a.LookupTIN(context.Background(), tid)
+			res, err := a.Verify(context.Background(), tid)
 			require.Error(t, err, body)
 			assert.Nil(t, res, body)
 			assert.ErrorIs(t, err, api.ErrNetwork, body)
@@ -211,23 +181,9 @@ func TestLookupTIN(t *testing.T) {
 		}
 	})
 
-	t.Run("nil or incomplete identity is an input error", func(t *testing.T) {
-		for name, bad := range map[string]*tax.Identity{
-			"nil identity":  nil,
-			"empty country": {Code: "B85905495"},
-			"empty code":    {Country: "ES"},
-		} {
-			a := serve(t, http.StatusOK, viesValidBody, nil)
-			res, err := a.LookupTIN(context.Background(), bad)
-			require.Error(t, err, name)
-			assert.Nil(t, res, name)
-			assert.ErrorIs(t, err, api.ErrInput, name)
-		}
-	})
-
 	t.Run("rate limited with a huge Retry-After clamps", func(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"10000000000000000"}})
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		var rl *api.RateLimitedError
 		require.True(t, errors.As(err, &rl))
@@ -236,7 +192,7 @@ func TestLookupTIN(t *testing.T) {
 
 	t.Run("malformed JSON on success status", func(t *testing.T) {
 		a := serve(t, http.StatusOK, `{"valid": tru`, nil)
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, api.ErrNetwork)
 	})
@@ -250,7 +206,7 @@ func TestLookupTIN(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 		a := New(WithBaseURL(srv.URL))
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.NoError(t, err)
 		assert.Equal(t, userAgent, got)
 	})
@@ -265,7 +221,7 @@ func TestLookupTIN(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 		a := New(WithBaseURL(srv.URL), WithTimeout(50*time.Millisecond))
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, api.ErrNetwork)
 	})
@@ -273,7 +229,7 @@ func TestLookupTIN(t *testing.T) {
 	t.Run("invalid base URL fails at first call", func(t *testing.T) {
 		for _, bad := range []string{"not a url", "ftp://example.com", "https:foo", "https:///path", "https://:443"} {
 			a := New(WithBaseURL(bad))
-			_, err := a.LookupTIN(context.Background(), tid)
+			_, err := a.Verify(context.Background(), tid)
 			require.Error(t, err, bad)
 			assert.ErrorIs(t, err, api.ErrInput, bad)
 			assert.Contains(t, err.Error(), "invalid base URL", bad)
@@ -286,7 +242,7 @@ func TestLookupTIN(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 		srv.Close()
 		a := New(WithBaseURL(srv.URL))
-		_, err := a.LookupTIN(context.Background(), tid)
+		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, api.ErrNetwork)
 	})

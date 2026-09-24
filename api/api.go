@@ -1,5 +1,5 @@
-// Package api defines the contract that TIN registry clients implement, the
-// Result they return, and the error taxonomy they use.
+// Package api defines the Verifier port that register clients implement, the
+// report types they fill, and the error taxonomy they use.
 //
 // ABOUT: This package sits below the registry implementations so that both
 // they and the root package can share these types without an import cycle.
@@ -8,8 +8,6 @@
 package api
 
 import (
-	"context"
-
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
@@ -44,12 +42,4 @@ type Result struct {
 	// structured form. VIES returns only an unstructured string, so it
 	// leaves this nil.
 	Address *org.Address
-}
-
-// LookupAPI is the interface that TIN registry clients implement.
-type LookupAPI interface {
-	// LookupTIN checks the tax identity against the registry. An unknown or
-	// unregistered number yields Valid false, not an error. Malformed input,
-	// including a number the registry rejects as badly formed, is ErrInput.
-	LookupTIN(ctx context.Context, tid *tax.Identity) (*Result, error)
 }

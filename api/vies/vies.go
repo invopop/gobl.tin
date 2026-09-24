@@ -1,5 +1,5 @@
-// Package vies implements the TIN lookup against the VIES service, the
-// European Commission's VAT number registry.
+// Package vies implements the verifier for VIES, the European Commission's
+// VAT number register.
 package vies
 
 import (
@@ -19,13 +19,12 @@ import (
 	"github.com/invopop/gobl/tax"
 )
 
-// Source identifies VIES as the registry in lookup results.
+// Source names VIES as the register in checks.
 const Source cbc.Key = "vies"
 
-// DefaultBaseURL is the production VIES REST endpoint. It is the default
-// because VIES lookups are read-only and have no side effects, and the
-// Commission provides no test environment, so lookups always run against
-// production.
+// DefaultBaseURL is the production VIES REST endpoint. VIES checks are read
+// only and the Commission provides no test environment, so checks always run
+// against production.
 const DefaultBaseURL = "https://ec.europa.eu/taxation_customs/vies/rest-api"
 
 // DefaultTimeout bounds a single API call.
@@ -49,14 +48,14 @@ var countryCodes = []l10n.Code{
 	l10n.NL, l10n.PL, l10n.PT, l10n.RO, l10n.SE, l10n.SI, l10n.SK, l10n.XI,
 }
 
-// API implements the VIES lookup.
+// API is the VIES verifier.
 type API struct {
 	baseURL string
 	timeout time.Duration
 	conn    *resty.Client
 
 	// initErr records an invalid construction, such as an unparseable base
-	// URL. Lookups return it, so a misconfiguration surfaces on the first call.
+	// URL. Verify returns it, so a misconfiguration surfaces on the first call.
 	initErr error
 }
 
@@ -128,24 +127,6 @@ type checkVatResponse struct {
 	Name        string              `json:"name"`
 	CountryCode l10n.TaxCountryCode `json:"countryCode"`
 	VatNumber   cbc.Code            `json:"vatNumber"`
-}
-
-// LookupTIN checks the VAT number against VIES. An unregistered number is a
-// Result with Valid false, not an error.
-func (a *API) LookupTIN(ctx context.Context, tid *tax.Identity) (*api.Result, error) {
-	if tid == nil {
-		return nil, api.ErrInput.WithMessage("no tax identity provided")
-	}
-	out, err := a.checkVat(ctx, tid.Country, tid.Code)
-	if err != nil {
-		return nil, err
-	}
-	return &api.Result{
-		Valid:  *out.Valid,
-		Source: Source,
-		TaxID:  confirmedTaxID(tid.Country, tid.Code, out),
-		Name:   unmask(out.Name),
-	}, nil
 }
 
 // Source names VIES as the register.
