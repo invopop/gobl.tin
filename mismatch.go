@@ -1,7 +1,6 @@
 package tin
 
 import (
-	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl/org"
 )
 
@@ -14,8 +13,8 @@ import (
 // mismatches compares the party with the record behind a check. The party
 // and its identifiers may be nil when a single identifier is verified; the
 // tax identity echo is then the only comparison.
-func mismatches(party *org.Party, ids []identifier, id identifier, check *api.Check) []*api.Mismatch {
-	var out []*api.Mismatch
+func mismatches(party *org.Party, ids []identifier, id identifier, check *Check) []*Mismatch {
+	var out []*Mismatch
 	if m := taxIDMismatch(id, check); m != nil {
 		out = append(out, m)
 	}
@@ -31,7 +30,7 @@ func mismatches(party *org.Party, ids []identifier, id identifier, check *api.Ch
 
 // taxIDMismatch compares the tax identity the register echoes with the
 // party's normalized tax identity.
-func taxIDMismatch(id identifier, check *api.Check) *api.Mismatch {
+func taxIDMismatch(id identifier, check *Check) *Mismatch {
 	if !id.IsTaxID() || check.TaxID == nil || check.TaxID == id.taxID {
 		return nil
 	}
@@ -39,9 +38,9 @@ func taxIDMismatch(id identifier, check *api.Check) *api.Mismatch {
 	if echo.Country == id.taxID.Country && echo.Code == id.taxID.Code {
 		return nil
 	}
-	return &api.Mismatch{
-		Field:    api.MismatchTaxID,
-		Path:     api.CodePath(api.PathTaxID),
+	return &Mismatch{
+		Field:    MismatchTaxID,
+		Path:     CodePath(PathTaxID),
 		Document: id.taxID.String(),
 		Register: echo.String(),
 	}
@@ -49,17 +48,17 @@ func taxIDMismatch(id identifier, check *api.Check) *api.Mismatch {
 
 // nameMismatch compares the party's name with the record's when both are
 // set.
-func nameMismatch(party *org.Party, rec *api.Record) *api.Mismatch {
-	if party.Name == "" || rec.Name == "" || api.NameMatches(rec.Name, party.Name) {
+func nameMismatch(party *org.Party, rec *Record) *Mismatch {
+	if party.Name == "" || rec.Name == "" || NameMatches(rec.Name, party.Name) {
 		return nil
 	}
-	return &api.Mismatch{Field: api.MismatchName, Path: api.PathName, Document: party.Name, Register: rec.Name}
+	return &Mismatch{Field: MismatchName, Path: PathName, Document: party.Name, Register: rec.Name}
 }
 
 // identityMismatches compares each record identity with the party
 // identities of the same country and type.
-func identityMismatches(ids []identifier, rec *api.Record) []*api.Mismatch {
-	var out []*api.Mismatch
+func identityMismatches(ids []identifier, rec *Record) []*Mismatch {
+	var out []*Mismatch
 	for _, r := range rec.Identities {
 		if r == nil || r.Type == "" {
 			continue
@@ -69,9 +68,9 @@ func identityMismatches(ids []identifier, rec *api.Record) []*api.Mismatch {
 			if !sameIdentityType(id, r) || id.Code == code {
 				continue
 			}
-			out = append(out, &api.Mismatch{
-				Field:    api.MismatchIdentity,
-				Path:     api.CodePath(id.Path),
+			out = append(out, &Mismatch{
+				Field:    MismatchIdentity,
+				Path:     CodePath(id.Path),
 				Document: id.Code.String(),
 				Register: code.String(),
 			})

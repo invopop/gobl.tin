@@ -1,4 +1,4 @@
-package api
+package tin
 
 import (
 	"context"
@@ -14,7 +14,8 @@ import (
 // picks a verifier per identifier, and turns the answers into a report with
 // mismatches. Errors from Verify are reserved for the cases where the register
 // could not answer; an invalid identifier is a Check with StatusInvalid and a
-// nil error.
+// nil error. Verifiers live in their own packages, such as vies, and import
+// this one.
 
 // Verifier is one register client.
 type Verifier interface {

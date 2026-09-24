@@ -3,12 +3,14 @@ package vies
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/invopop/gobl.tin/api"
+	tin "github.com/invopop/gobl.tin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +59,7 @@ const viesInvalidBody = `{
 
 // serve starts a test server that always answers with the given status,
 // headers and body, and returns an API pointed at it.
-func serve(t *testing.T, status int, body string, header http.Header) *API {
+func serve(t *testing.T, status int, body string, header http.Header) *Verifier {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		for k, vs := range header {
@@ -74,7 +76,7 @@ func serve(t *testing.T, status int, body string, header http.Header) *API {
 }
 
 func TestVerifyTransport(t *testing.T) {
-	tid := api.Identifier{Path: api.PathTaxID, Country: "ES", Code: "B85905495"}
+	tid := tin.Identifier{Path: tin.PathTaxID, Country: "ES", Code: "B85905495"}
 
 	t.Run("missing echo falls back to the request identifier", func(t *testing.T) {
 		a := serve(t, http.StatusOK, `{"valid": true, "name": "ACME GMBH"}`, nil)
@@ -90,9 +92,9 @@ func TestVerifyTransport(t *testing.T) {
 		res, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
 		assert.Nil(t, res)
-		assert.ErrorIs(t, err, api.ErrInput)
+		assert.ErrorIs(t, err, tin.ErrInput)
 		assert.Contains(t, err.Error(), "Invalid VAT number format")
-		var e *api.Error
+		var e *tin.Error
 		require.True(t, errors.As(err, &e))
 		assert.Equal(t, "400", e.Code())
 	})
@@ -101,10 +103,10 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusInternalServerError, `{"message": "MS_UNAVAILABLE"}`, nil)
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrServer)
-		assert.NotErrorIs(t, err, api.ErrNetwork)
+		assert.ErrorIs(t, err, tin.ErrServer)
+		assert.NotErrorIs(t, err, tin.ErrNetwork)
 		assert.Contains(t, err.Error(), "MS_UNAVAILABLE")
-		var e *api.Error
+		var e *tin.Error
 		require.True(t, errors.As(err, &e))
 		assert.Equal(t, "500", e.Code())
 	})
@@ -113,8 +115,8 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusBadGateway, `<html>bad gateway</html>`, nil)
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrServer)
-		var e *api.Error
+		assert.ErrorIs(t, err, tin.ErrServer)
+		var e *tin.Error
 		require.True(t, errors.As(err, &e))
 		assert.Equal(t, "502", e.Code())
 		assert.Contains(t, err.Error(), "<html>bad gateway</html>")
@@ -124,7 +126,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"30"}})
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		var rl *api.RateLimitedError
+		var rl *tin.RateLimitedError
 		require.True(t, errors.As(err, &rl))
 		assert.Equal(t, 30*time.Second, rl.RetryAfter)
 	})
@@ -133,7 +135,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"0"}})
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		var rl *api.RateLimitedError
+		var rl *tin.RateLimitedError
 		require.True(t, errors.As(err, &rl))
 		assert.Equal(t, time.Duration(0), rl.RetryAfter)
 	})
@@ -143,7 +145,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {when}})
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		var rl *api.RateLimitedError
+		var rl *tin.RateLimitedError
 		require.True(t, errors.As(err, &rl))
 		assert.Greater(t, rl.RetryAfter, 60*time.Second)
 		assert.LessOrEqual(t, rl.RetryAfter, 90*time.Second)
@@ -154,7 +156,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {when}})
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		var rl *api.RateLimitedError
+		var rl *tin.RateLimitedError
 		require.True(t, errors.As(err, &rl))
 		assert.Equal(t, time.Duration(0), rl.RetryAfter)
 	})
@@ -163,7 +165,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, nil)
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		var rl *api.RateLimitedError
+		var rl *tin.RateLimitedError
 		require.True(t, errors.As(err, &rl))
 		assert.Equal(t, defaultRetryAfter, rl.RetryAfter)
 	})
@@ -174,8 +176,8 @@ func TestVerifyTransport(t *testing.T) {
 			res, err := a.Verify(context.Background(), tid)
 			require.Error(t, err, body)
 			assert.Nil(t, res, body)
-			assert.ErrorIs(t, err, api.ErrNetwork, body)
-			var e *api.Error
+			assert.ErrorIs(t, err, tin.ErrNetwork, body)
+			var e *tin.Error
 			require.True(t, errors.As(err, &e), body)
 			assert.Equal(t, "200", e.Code(), body)
 		}
@@ -185,7 +187,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"10000000000000000"}})
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		var rl *api.RateLimitedError
+		var rl *tin.RateLimitedError
 		require.True(t, errors.As(err, &rl))
 		assert.Positive(t, rl.RetryAfter)
 	})
@@ -194,7 +196,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := serve(t, http.StatusOK, `{"valid": tru`, nil)
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrNetwork)
+		assert.ErrorIs(t, err, tin.ErrNetwork)
 	})
 
 	t.Run("sends identifying user agent", func(t *testing.T) {
@@ -223,7 +225,7 @@ func TestVerifyTransport(t *testing.T) {
 		a := New(WithBaseURL(srv.URL), WithTimeout(50*time.Millisecond))
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrNetwork)
+		assert.ErrorIs(t, err, tin.ErrNetwork)
 	})
 
 	t.Run("invalid base URL fails at first call", func(t *testing.T) {
@@ -231,7 +233,7 @@ func TestVerifyTransport(t *testing.T) {
 			a := New(WithBaseURL(bad))
 			_, err := a.Verify(context.Background(), tid)
 			require.Error(t, err, bad)
-			assert.ErrorIs(t, err, api.ErrInput, bad)
+			assert.ErrorIs(t, err, tin.ErrInput, bad)
 			assert.Contains(t, err.Error(), "invalid base URL", bad)
 		}
 	})
@@ -244,29 +246,51 @@ func TestVerifyTransport(t *testing.T) {
 		a := New(WithBaseURL(srv.URL))
 		_, err := a.Verify(context.Background(), tid)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrNetwork)
+		assert.ErrorIs(t, err, tin.ErrNetwork)
 	})
 }
 
 func TestNew(t *testing.T) {
 	t.Run("default timeout", func(t *testing.T) {
 		a := New()
-		assert.Equal(t, DefaultTimeout, a.HTTPClient().Timeout)
+		assert.Equal(t, DefaultTimeout, a.conn.GetClient().Timeout)
 	})
 
 	t.Run("WithTimeout overrides the default", func(t *testing.T) {
 		a := New(WithTimeout(3 * time.Second))
-		assert.Equal(t, 3*time.Second, a.HTTPClient().Timeout)
+		assert.Equal(t, 3*time.Second, a.conn.GetClient().Timeout)
 	})
 
-	t.Run("HTTPClient exposes the underlying client", func(t *testing.T) {
-		a := New()
-		require.NotNil(t, a.HTTPClient())
+	t.Run("WithHTTPClient sends requests through the client", func(t *testing.T) {
+		var got string
+		rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			got = r.URL.Path
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": {"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(viesValidBody)),
+				Request:    r,
+			}, nil
+		})
+		a := New(WithHTTPClient(&http.Client{Transport: rt}))
+		check, err := a.Verify(context.Background(), tin.Identifier{Path: tin.PathTaxID, Country: "ES", Code: "B85905495"})
+		require.NoError(t, err)
+		assert.Equal(t, tin.StatusValid, check.Status)
+		assert.True(t, strings.HasSuffix(got, checkVatPath), got)
+	})
+
+	t.Run("implements tin.Verifier", func(*testing.T) {
+		var _ tin.Verifier = New()
 	})
 }
 
+// roundTripFunc adapts a function to http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 func TestVerifier(t *testing.T) {
-	id := api.Identifier{Path: api.PathTaxID, Country: "DE", Code: "282741168"}
+	id := tin.Identifier{Path: tin.PathTaxID, Country: "DE", Code: "282741168"}
 
 	t.Run("source", func(t *testing.T) {
 		assert.Equal(t, Source, New().Source())
@@ -274,14 +298,14 @@ func TestVerifier(t *testing.T) {
 
 	t.Run("supports EU tax identities only", func(t *testing.T) {
 		a := New()
-		assert.True(t, a.Supports(api.Identifier{Country: "ES", Code: "B85905495"}))
-		assert.True(t, a.Supports(api.Identifier{Country: "EL", Code: "123456789"}), "VIES uses EL for Greece")
-		assert.True(t, a.Supports(api.Identifier{Country: "XI", Code: "123456789"}), "VIES covers Northern Ireland as XI")
-		assert.False(t, a.Supports(api.Identifier{Country: "GB", Code: "123456789"}), "GB proper is not covered")
-		assert.False(t, a.Supports(api.Identifier{Country: "US", Code: "123456789"}))
-		assert.False(t, a.Supports(api.Identifier{Code: "123456789"}))
-		assert.False(t, a.Supports(api.Identifier{Country: "DE", Type: "HRB", Code: "12345"}), "org identities are not tax identities")
-		assert.False(t, a.Supports(api.Identifier{Country: "DE", Key: "other", Code: "12345"}))
+		assert.True(t, a.Supports(tin.Identifier{Country: "ES", Code: "B85905495"}))
+		assert.True(t, a.Supports(tin.Identifier{Country: "EL", Code: "123456789"}), "VIES uses EL for Greece")
+		assert.True(t, a.Supports(tin.Identifier{Country: "XI", Code: "123456789"}), "VIES covers Northern Ireland as XI")
+		assert.False(t, a.Supports(tin.Identifier{Country: "GB", Code: "123456789"}), "GB proper is not covered")
+		assert.False(t, a.Supports(tin.Identifier{Country: "US", Code: "123456789"}))
+		assert.False(t, a.Supports(tin.Identifier{Code: "123456789"}))
+		assert.False(t, a.Supports(tin.Identifier{Country: "DE", Type: "HRB", Code: "12345"}), "org identities are not tax identities")
+		assert.False(t, a.Supports(tin.Identifier{Country: "DE", Key: "other", Code: "12345"}))
 	})
 
 	t.Run("valid with disclosed name", func(t *testing.T) {
@@ -289,8 +313,8 @@ func TestVerifier(t *testing.T) {
 		before := time.Now().Add(-time.Second)
 		check, err := a.Verify(context.Background(), id)
 		require.NoError(t, err)
-		assert.Equal(t, api.PathTaxID, check.Path)
-		assert.Equal(t, api.StatusValid, check.Status)
+		assert.Equal(t, tin.PathTaxID, check.Path)
+		assert.Equal(t, tin.StatusValid, check.Status)
 		assert.Equal(t, Source, check.Source)
 		assert.True(t, check.CheckedAt.After(before))
 		require.NotNil(t, check.Record)
@@ -305,7 +329,7 @@ func TestVerifier(t *testing.T) {
 		a := serve(t, http.StatusOK, viesValidBody, nil)
 		check, err := a.Verify(context.Background(), id)
 		require.NoError(t, err)
-		assert.Equal(t, api.StatusValid, check.Status)
+		assert.Equal(t, tin.StatusValid, check.Status)
 		assert.Nil(t, check.Record)
 	})
 
@@ -313,7 +337,7 @@ func TestVerifier(t *testing.T) {
 		a := serve(t, http.StatusOK, viesInvalidBody, nil)
 		check, err := a.Verify(context.Background(), id)
 		require.NoError(t, err)
-		assert.Equal(t, api.StatusInvalid, check.Status)
+		assert.Equal(t, tin.StatusInvalid, check.Status)
 		assert.Nil(t, check.Record)
 	})
 
@@ -322,31 +346,31 @@ func TestVerifier(t *testing.T) {
 		check, err := a.Verify(context.Background(), id)
 		require.Error(t, err)
 		assert.Nil(t, check)
-		assert.ErrorIs(t, err, api.ErrServer)
+		assert.ErrorIs(t, err, tin.ErrServer)
 	})
 
 	t.Run("bad request is an input error", func(t *testing.T) {
 		a := serve(t, http.StatusBadRequest, `{"message": "Invalid VAT number format"}`, nil)
 		_, err := a.Verify(context.Background(), id)
-		assert.ErrorIs(t, err, api.ErrInput)
+		assert.ErrorIs(t, err, tin.ErrInput)
 	})
 
 	t.Run("rate limited", func(t *testing.T) {
 		a := serve(t, http.StatusTooManyRequests, `{}`, http.Header{"Retry-After": {"30"}})
 		_, err := a.Verify(context.Background(), id)
-		var rl *api.RateLimitedError
+		var rl *tin.RateLimitedError
 		require.True(t, errors.As(err, &rl))
 		assert.Equal(t, 30*time.Second, rl.RetryAfter)
 	})
 
 	t.Run("incomplete identifier is an input error", func(t *testing.T) {
 		a := serve(t, http.StatusOK, viesValidBody, nil)
-		for name, bad := range map[string]api.Identifier{
+		for name, bad := range map[string]tin.Identifier{
 			"empty country": {Code: "B85905495"},
 			"empty code":    {Country: "ES"},
 		} {
 			_, err := a.Verify(context.Background(), bad)
-			assert.ErrorIs(t, err, api.ErrInput, name)
+			assert.ErrorIs(t, err, tin.ErrInput, name)
 		}
 	})
 }

@@ -3,7 +3,6 @@ package tin
 import (
 	"strings"
 
-	"github.com/invopop/gobl.tin/api"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
@@ -13,7 +12,7 @@ import (
 // identifier is one identifier of a party together with a normalized copy of
 // the GOBL value it comes from. Exactly one of taxID and identity is set.
 type identifier struct {
-	api.Identifier
+	Identifier
 	taxID    *tax.Identity
 	identity *org.Identity
 }
@@ -43,8 +42,8 @@ func walk(party *org.Party) []identifier {
 func fromTaxID(tid *tax.Identity) identifier {
 	cp := normalizeTaxID(tid)
 	return identifier{
-		Identifier: api.Identifier{
-			Path:    api.PathTaxID,
+		Identifier: Identifier{
+			Path:    PathTaxID,
 			Country: cp.Country,
 			Code:    cp.Code,
 		},
@@ -57,8 +56,8 @@ func fromTaxID(tid *tax.Identity) identifier {
 func fromIdentity(i int, id *org.Identity) identifier {
 	cp := normalizeIdentity(id)
 	return identifier{
-		Identifier: api.Identifier{
-			Path:    api.IdentityPath(i),
+		Identifier: Identifier{
+			Path:    IdentityPath(i),
 			Country: l10n.TaxCountryCode(cp.Country),
 			Key:     cp.Key,
 			Type:    cp.Type,

@@ -7,27 +7,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invopop/gobl.tin/api"
+	tin "github.com/invopop/gobl.tin"
 	"github.com/invopop/gobl/cbc"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// fakeVIES stands in for the VIES verifier: same source, canned answers by
-// code, so that the command never dials the register.
+// fakeVIES stands in for the VIES verifier with canned answers by code, so
+// that the command never dials the register.
 type fakeVIES struct {
-	checks map[cbc.Code]*api.Check
+	checks map[cbc.Code]*tin.Check
 	errs   map[cbc.Code]error
 }
 
 func (f *fakeVIES) Source() cbc.Key { return "vies" }
 
-func (f *fakeVIES) Supports(id api.Identifier) bool {
+func (f *fakeVIES) Supports(id tin.Identifier) bool {
 	return id.Type == "" && id.Key == ""
 }
 
-func (f *fakeVIES) Verify(_ context.Context, id api.Identifier) (*api.Check, error) {
+func (f *fakeVIES) Verify(_ context.Context, id tin.Identifier) (*tin.Check, error) {
 	if err, ok := f.errs[id.Code]; ok {
 		return nil, err
 	}
@@ -35,15 +35,15 @@ func (f *fakeVIES) Verify(_ context.Context, id api.Identifier) (*api.Check, err
 		cp := *c
 		return &cp, nil
 	}
-	return &api.Check{Status: api.StatusInvalid, Source: "vies", CheckedAt: time.Now()}, nil
+	return &tin.Check{Status: tin.StatusInvalid, Source: "vies", CheckedAt: time.Now()}, nil
 }
 
 var checkedAt = time.Date(2026, 9, 24, 9, 12, 0, 0, time.UTC)
 
-func validCheck(name string) *api.Check {
-	c := &api.Check{Status: api.StatusValid, Source: "vies", CheckedAt: checkedAt}
+func validCheck(name string) *tin.Check {
+	c := &tin.Check{Status: tin.StatusValid, Source: "vies", CheckedAt: checkedAt}
 	if name != "" {
-		c.Record = &api.Record{Name: name}
+		c.Record = &tin.Record{Name: name}
 	}
 	return c
 }
@@ -55,7 +55,7 @@ func runVerify(t *testing.T, fake *fakeVIES, args ...string) (string, error) {
 	cmd := &cobra.Command{SilenceUsage: true, SilenceErrors: true}
 	vo := verify(&rootOpts{})
 	if fake != nil {
-		vo.verifiers = []api.Verifier{fake}
+		vo.verifiers = []tin.Verifier{fake}
 	}
 	cmd.AddCommand(vo.cmd())
 	out := &bytes.Buffer{}
@@ -69,7 +69,7 @@ func runVerify(t *testing.T, fake *fakeVIES, args ...string) (string, error) {
 func TestVerifyCommand(t *testing.T) {
 	// The customer of invoice-valid.json is 282741168 and the supplier is
 	// 111111125; party.json carries 282741168 and an HRB identity.
-	allValid := &fakeVIES{checks: map[cbc.Code]*api.Check{
+	allValid := &fakeVIES{checks: map[cbc.Code]*tin.Check{
 		"282741168": validCheck("ACME TRADING GMBH"),
 		"111111125": validCheck(""),
 	}}
@@ -106,7 +106,7 @@ func TestVerifyCommand(t *testing.T) {
 	})
 
 	t.Run("invalid check exits non-zero after printing", func(t *testing.T) {
-		fake := &fakeVIES{checks: map[cbc.Code]*api.Check{"111111125": validCheck("")}}
+		fake := &fakeVIES{checks: map[cbc.Code]*tin.Check{"111111125": validCheck("")}}
 		out, err := runVerify(t, fake, "../../test/data/invoice-valid.json", "--party", "both")
 		assert.ErrorIs(t, err, errNotValid)
 		assert.Equal(t, "customer:\n"+
@@ -116,7 +116,7 @@ func TestVerifyCommand(t *testing.T) {
 	})
 
 	t.Run("unverified check prints the failure and exits non-zero", func(t *testing.T) {
-		fake := &fakeVIES{errs: map[cbc.Code]error{"282741168": api.ErrServer.WithCode("500").WithMessage("MS_UNAVAILABLE")}}
+		fake := &fakeVIES{errs: map[cbc.Code]error{"282741168": tin.ErrServer.WithCode("500").WithMessage("MS_UNAVAILABLE")}}
 		out, err := runVerify(t, fake, "../../test/data/party.json")
 		assert.ErrorIs(t, err, errNotValid)
 		assert.Equal(t, "/tax_id: unverified (vies): server: 500: MS_UNAVAILABLE\n"+

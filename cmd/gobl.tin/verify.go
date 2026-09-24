@@ -9,7 +9,7 @@ import (
 
 	"github.com/invopop/gobl"
 	tin "github.com/invopop/gobl.tin"
-	"github.com/invopop/gobl.tin/api"
+	"github.com/invopop/gobl.tin/vies"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/org"
 	"github.com/spf13/cobra"
@@ -31,9 +31,10 @@ type verifyOpts struct {
 	party string
 	json  bool
 
-	// verifiers are added to the client with tin.WithVerifier. Tests inject a
-	// fake with the VIES source here so that no command dials the register.
-	verifiers []api.Verifier
+	// verifiers is the ordered set the command verifies with. Nil means the
+	// production set, VIES; tests inject fakes so that no command dials the
+	// register.
+	verifiers []tin.Verifier
 }
 
 // labelled pairs a report with the name of the party it describes.
@@ -71,11 +72,11 @@ func (c *verifyOpts) runE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	opts := make([]tin.Option, 0, len(c.verifiers))
-	for _, v := range c.verifiers {
-		opts = append(opts, tin.WithVerifier(v))
+	verifiers := c.verifiers
+	if verifiers == nil {
+		verifiers = []tin.Verifier{vies.New()}
 	}
-	client := tin.New(opts...)
+	client := tin.New(verifiers...)
 
 	reports := make([]labelled, 0, len(parties))
 	for _, p := range parties {

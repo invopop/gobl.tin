@@ -1,4 +1,4 @@
-package api
+package tin
 
 import (
 	"strconv"
@@ -14,12 +14,8 @@ import (
 // field it describes. Consumers never construct an Identifier: the public
 // Client API takes GOBL types and does the walk.
 //
-// Every path in a report is an RFC 6901 JSON Pointer relative to the party
-// document, for example "/tax_id" or "/identities/1/code". Consumers that
-// match in Go use the typed values, Check.TaxID, Check.Identity and
-// Mismatch.Field, rather than parsing paths. The pointer segments here are
-// fixed field names and array indices, which never contain "/" or "~", so
-// the builders do no escaping.
+// The pointer segments here are fixed field names and array indices, which
+// never contain "/" or "~", so the builders do no escaping.
 
 // Identifier is one identifier of a party as a verifier sees it.
 type Identifier struct {

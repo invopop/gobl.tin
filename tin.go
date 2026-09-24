@@ -1,129 +1,47 @@
 // Package tin verifies the identifiers of GOBL parties against the registers
 // that issue them, such as VIES for EU VAT numbers, and reports what the
 // register holds so that a party can be corrected with a patch.
+//
+// ABOUT: A Client holds an ordered list of verifiers. For each identifier of
+// a party, the tax identity first and then each identity in order, the first
+// verifier that supports it answers. The Client is safe for concurrent use
+// when its verifiers are; it holds no state of its own between calls.
+//
+// Every path in a report is an RFC 6901 JSON Pointer relative to the party
+// document, for example "/tax_id" or "/identities/1/code". A consumer that
+// patches an invoice prefixes the party's location, "/customer" or
+// "/supplier". Go consumers match on the typed values, Check.TaxID,
+// Check.Identity and Mismatch.Field, rather than parsing paths.
 package tin
 
 import (
 	"context"
 
-	"github.com/invopop/gobl.tin/api"
-	"github.com/invopop/gobl.tin/api/vies"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 )
 
-// Verifier is one register client. Implement it to add a register.
-type Verifier = api.Verifier
-
-// Verification is the report for one party.
-type Verification = api.Verification
-
-// Check is the outcome for one identifier of a party.
-type Check = api.Check
-
-// Record is what the register holds for an identifier.
-type Record = api.Record
-
-// Mismatch is one field where the party disagrees with the record.
-type Mismatch = api.Mismatch
-
-// Status is the outcome of one check.
-type Status = api.Status
-
-// Check statuses.
-const (
-	StatusValid       = api.StatusValid
-	StatusInvalid     = api.StatusInvalid
-	StatusUnsupported = api.StatusUnsupported
-	StatusUnverified  = api.StatusUnverified
-)
-
-// Policy decides what Verification.Patch may write.
-type Policy = api.Policy
-
-// NamePolicy decides when the register's name is written.
-type NamePolicy = api.NamePolicy
-
-// IdentitiesPolicy decides when the register's identities are written.
-type IdentitiesPolicy = api.IdentitiesPolicy
-
-// AddressPolicy decides when the register's addresses are written.
-type AddressPolicy = api.AddressPolicy
-
-// Policy values.
-const (
-	NamePolicyFill             = api.NamePolicyFill
-	NamePolicyPreferRegister   = api.NamePolicyPreferRegister
-	NamePolicyKeep             = api.NamePolicyKeep
-	IdentitiesPolicyAddMissing = api.IdentitiesPolicyAddMissing
-	IdentitiesPolicyKeep       = api.IdentitiesPolicyKeep
-	AddressPolicyNone          = api.AddressPolicyNone
-	AddressPolicyAppend        = api.AddressPolicyAppend
-	AddressPolicyReplace       = api.AddressPolicyReplace
-)
-
-// NameMatches reports whether two names agree once case, punctuation and
-// surrounding whitespace are folded.
-func NameMatches(a, b string) bool {
-	return api.NameMatches(a, b)
-}
-
-// Client verifies the identifiers of a party with a set of verifiers.
+// Client verifies the identifiers of a party with an ordered set of
+// verifiers.
 //
 // The Client holds no cache, so every call reaches the register. Caching, and
 // how long an answer stays fresh, is the consuming application's decision.
-// The verifiers are built once per Client and reused, so checks share
-// connections.
 type Client struct {
-	viesOpts  []vies.Option
-	injected  []api.Verifier
-	verifiers []api.Verifier
+	verifiers []Verifier
 }
 
-// Option configures the Client.
-type Option func(*Client)
-
-// WithVIESOptions passes options through to the VIES verifier the Client
-// builds, for example a timeout or a different base URL.
-func WithVIESOptions(opts ...vies.Option) Option {
-	return func(c *Client) {
-		c.viesOpts = append(c.viesOpts, opts...)
-	}
-}
-
-// WithVerifier adds a verifier. A verifier with the same Source as one the
-// Client already holds takes its place; any other is appended after the
-// default set.
-func WithVerifier(v api.Verifier) Option {
-	return func(c *Client) {
-		c.injected = append(c.injected, v)
-	}
-}
-
-// New creates a Client with the default verifier set: VIES.
-func New(opts ...Option) *Client {
+// New creates a Client over the verifiers, in routing order: the first
+// verifier that supports an identifier answers for it. A Client with no
+// verifiers marks every identifier unsupported. Nil entries are skipped. Two
+// verifiers may share a Source; order still decides which one answers.
+func New(verifiers ...Verifier) *Client {
 	c := new(Client)
-	for _, opt := range opts {
-		opt(c)
-	}
-	c.verifiers = []api.Verifier{vies.New(c.viesOpts...)}
-	for _, v := range c.injected {
-		c.verifiers = replaceOrAppend(c.verifiers, v)
-	}
-	c.injected = nil
-	return c
-}
-
-// replaceOrAppend puts v in place of the verifier with the same Source, or
-// at the end when none has it.
-func replaceOrAppend(set []api.Verifier, v api.Verifier) []api.Verifier {
-	for i, existing := range set {
-		if existing.Source() == v.Source() {
-			set[i] = v
-			return set
+	for _, v := range verifiers {
+		if v != nil {
+			c.verifiers = append(c.verifiers, v)
 		}
 	}
-	return append(set, v)
+	return c
 }
 
 // Verify checks every identifier of the party: the tax identity first, then
@@ -135,7 +53,7 @@ func (c *Client) Verify(ctx context.Context, party *org.Party) (*Verification, e
 		return nil, ErrInput.WithMessage("no party provided")
 	}
 	ids := walk(party)
-	report := api.NewVerification(party)
+	report := NewVerification(party)
 	for _, id := range ids {
 		check := c.check(ctx, id)
 		check.Mismatches = mismatches(party, ids, id, check)
@@ -174,28 +92,46 @@ func (c *Client) VerifyIdentity(ctx context.Context, oid *org.Identity) (*Check,
 	return check, nil
 }
 
+// SupportsTaxID reports whether a verifier of the Client covers the tax
+// identity. A covered identity can still come back unverified.
+func (c *Client) SupportsTaxID(tid *tax.Identity) bool {
+	if tid == nil {
+		return false
+	}
+	return c.verifierFor(fromTaxID(tid).Identifier) != nil
+}
+
+// SupportsIdentity reports whether a verifier of the Client covers the
+// identity.
+func (c *Client) SupportsIdentity(oid *org.Identity) bool {
+	if oid == nil {
+		return false
+	}
+	return c.verifierFor(fromIdentity(0, oid).Identifier) != nil
+}
+
 // check runs the first verifier that supports the identifier and shapes the
 // outcome into a Check that names the identifier.
-func (c *Client) check(ctx context.Context, id identifier) *api.Check {
-	v := verifierFor(c.verifiers, id.Identifier)
+func (c *Client) check(ctx context.Context, id identifier) *Check {
+	v := c.verifierFor(id.Identifier)
 	if v == nil {
-		return id.check(&api.Check{Status: api.StatusUnsupported})
+		return id.check(&Check{Status: StatusUnsupported})
 	}
 	check, err := v.Verify(ctx, id.Identifier)
 	if err != nil {
-		check = &api.Check{Source: v.Source()}
+		check = &Check{Source: v.Source()}
 		check.Fail(err)
 		return id.check(check)
 	}
 	if check == nil {
-		check = &api.Check{Source: v.Source()}
+		check = &Check{Source: v.Source()}
 		check.Fail(ErrServer.WithMessage("verifier returned no check"))
 	}
 	return id.check(check)
 }
 
 // check fills the identifier fields of a Check.
-func (id identifier) check(c *api.Check) *api.Check {
+func (id identifier) check(c *Check) *Check {
 	c.Path = id.Path
 	if id.taxID != nil && c.TaxID == nil {
 		c.TaxID = id.taxID
@@ -206,35 +142,13 @@ func (id identifier) check(c *api.Check) *api.Check {
 	return c
 }
 
-// verifierFor returns the first verifier in the set that supports the
-// identifier, or nil.
-func verifierFor(set []api.Verifier, id api.Identifier) api.Verifier {
-	for _, v := range set {
+// verifierFor returns the first verifier that supports the identifier, or
+// nil.
+func (c *Client) verifierFor(id Identifier) Verifier {
+	for _, v := range c.verifiers {
 		if v.Supports(id) {
 			return v
 		}
 	}
 	return nil
-}
-
-// defaultVerifiers is the verifier set that the package-level coverage
-// queries consult: the same set New builds without options.
-var defaultVerifiers = []api.Verifier{vies.New()}
-
-// SupportsTaxID reports whether the default verifier set covers the tax
-// identity. A covered identity can still come back unverified.
-func SupportsTaxID(tid *tax.Identity) bool {
-	if tid == nil {
-		return false
-	}
-	return verifierFor(defaultVerifiers, fromTaxID(tid).Identifier) != nil
-}
-
-// SupportsIdentity reports whether the default verifier set covers the
-// identity.
-func SupportsIdentity(oid *org.Identity) bool {
-	if oid == nil {
-		return false
-	}
-	return verifierFor(defaultVerifiers, fromIdentity(0, oid).Identifier) != nil
 }

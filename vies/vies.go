@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/invopop/gobl.tin/api"
+	tin "github.com/invopop/gobl.tin"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/tax"
@@ -48,10 +48,11 @@ var countryCodes = []l10n.Code{
 	l10n.NL, l10n.PL, l10n.PT, l10n.RO, l10n.SE, l10n.SI, l10n.SK, l10n.XI,
 }
 
-// API is the VIES verifier.
-type API struct {
+// Verifier is the VIES verifier. It implements tin.Verifier.
+type Verifier struct {
 	baseURL string
 	timeout time.Duration
+	http    *http.Client
 	conn    *resty.Client
 
 	// initErr records an invalid construction, such as an unparseable base
@@ -59,27 +60,36 @@ type API struct {
 	initErr error
 }
 
-// Option configures the API.
-type Option func(*API)
+// Option configures the Verifier.
+type Option func(*Verifier)
 
 // WithBaseURL points the API at a different endpoint. It exists so that tests
 // can run against a local server instead of the live VIES service.
 func WithBaseURL(url string) Option {
-	return func(a *API) {
+	return func(a *Verifier) {
 		a.baseURL = url
 	}
 }
 
 // WithTimeout overrides the default bound on a single API call.
 func WithTimeout(d time.Duration) Option {
-	return func(a *API) {
+	return func(a *Verifier) {
 		a.timeout = d
 	}
 }
 
-// New creates a new VIES API client.
-func New(opts ...Option) *API {
-	a := &API{
+// WithHTTPClient makes the verifier send requests through the client, for
+// example one with a custom transport or proxy. The timeout still applies
+// per request.
+func WithHTTPClient(c *http.Client) Option {
+	return func(a *Verifier) {
+		a.http = c
+	}
+}
+
+// New creates a VIES verifier.
+func New(opts ...Option) *Verifier {
+	a := &Verifier{
 		baseURL: DefaultBaseURL,
 		timeout: DefaultTimeout,
 	}
@@ -87,23 +97,21 @@ func New(opts ...Option) *API {
 		opt(a)
 	}
 	if u, err := url.Parse(a.baseURL); err != nil {
-		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q", a.baseURL).WithCause(err)
+		a.initErr = tin.ErrInput.WithMsgf("invalid base URL %q", a.baseURL).WithCause(err)
 	} else if u.Scheme != "http" && u.Scheme != "https" {
-		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q: scheme must be http or https", a.baseURL)
+		a.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: scheme must be http or https", a.baseURL)
 	} else if u.Hostname() == "" {
-		a.initErr = api.ErrInput.WithMsgf("invalid base URL %q: missing host", a.baseURL)
+		a.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: missing host", a.baseURL)
 	}
-	a.conn = resty.New().
+	a.conn = resty.New()
+	if a.http != nil {
+		a.conn = resty.NewWithClient(a.http)
+	}
+	a.conn.
 		SetBaseURL(a.baseURL).
 		SetTimeout(a.timeout).
 		SetHeader("User-Agent", userAgent)
 	return a
-}
-
-// HTTPClient returns the underlying HTTP client, which lets tests attach a
-// mock transport.
-func (a *API) HTTPClient() *http.Client {
-	return a.conn.GetClient()
 }
 
 // checkVatRequest is the request body for the VIES API.
@@ -130,50 +138,50 @@ type checkVatResponse struct {
 }
 
 // Source names VIES as the register.
-func (a *API) Source() cbc.Key {
+func (a *Verifier) Source() cbc.Key {
 	return Source
 }
 
 // Supports reports whether the identifier is a tax identity of a country
 // that VIES covers.
-func (a *API) Supports(id api.Identifier) bool {
+func (a *Verifier) Supports(id tin.Identifier) bool {
 	return id.Type == "" && id.Key == "" && id.Country.Code().In(countryCodes...)
 }
 
 // Verify checks the identifier against VIES. An unregistered number is a
 // Check with StatusInvalid, not an error.
-func (a *API) Verify(ctx context.Context, id api.Identifier) (*api.Check, error) {
+func (a *Verifier) Verify(ctx context.Context, id tin.Identifier) (*tin.Check, error) {
 	out, err := a.checkVat(ctx, id.Country, id.Code)
 	if err != nil {
 		return nil, err
 	}
-	check := &api.Check{
+	check := &tin.Check{
 		Path:      id.Path,
 		TaxID:     confirmedTaxID(id.Country, id.Code, out),
-		Status:    api.StatusInvalid,
+		Status:    tin.StatusInvalid,
 		Source:    Source,
 		CheckedAt: time.Now().UTC(),
 	}
 	if *out.Valid {
-		check.Status = api.StatusValid
+		check.Status = tin.StatusValid
 	}
 	if name := unmask(out.Name); name != "" {
-		check.Record = &api.Record{Name: name}
+		check.Record = &tin.Record{Name: name}
 	}
 	return check, nil
 }
 
 // checkVat posts the number to VIES and decodes the answer. The response
 // always carries a validity field on return.
-func (a *API) checkVat(ctx context.Context, country l10n.TaxCountryCode, code cbc.Code) (*checkVatResponse, error) {
+func (a *Verifier) checkVat(ctx context.Context, country l10n.TaxCountryCode, code cbc.Code) (*checkVatResponse, error) {
 	if a.initErr != nil {
 		return nil, a.initErr
 	}
 	if country == "" {
-		return nil, api.ErrInput.WithMessage("no country code provided")
+		return nil, tin.ErrInput.WithMessage("no country code provided")
 	}
 	if code == "" {
-		return nil, api.ErrInput.WithMessage("no tax ID code provided")
+		return nil, tin.ErrInput.WithMessage("no tax ID code provided")
 	}
 
 	reqBody := checkVatRequest{
@@ -186,7 +194,7 @@ func (a *API) checkVat(ctx context.Context, country l10n.TaxCountryCode, code cb
 		SetBody(reqBody).
 		Post(checkVatPath)
 	if err != nil {
-		return nil, api.ErrNetwork.WithCause(err)
+		return nil, tin.ErrNetwork.WithCause(err)
 	}
 
 	if !resp.IsSuccess() {
@@ -196,10 +204,10 @@ func (a *API) checkVat(ctx context.Context, country l10n.TaxCountryCode, code cb
 	status := strconv.Itoa(resp.StatusCode())
 	out := new(checkVatResponse)
 	if err := json.Unmarshal(resp.Body(), out); err != nil {
-		return nil, api.ErrNetwork.WithCode(status).WithMessage("decoding response").WithCause(err)
+		return nil, tin.ErrNetwork.WithCode(status).WithMessage("decoding response").WithCause(err)
 	}
 	if out.Valid == nil {
-		return nil, api.ErrNetwork.WithCode(status).WithMessage("response carries no validity field")
+		return nil, tin.ErrNetwork.WithCode(status).WithMessage("response carries no validity field")
 	}
 	return out, nil
 }
@@ -228,14 +236,14 @@ func statusError(resp *resty.Response) error {
 		// VIES answers 400 when the request itself is malformed, for example
 		// a number with symbols in it. That is a problem with the input, not
 		// with the register.
-		return api.ErrInput.WithCode(status).WithMessage(msg)
+		return tin.ErrInput.WithCode(status).WithMessage(msg)
 	case http.StatusTooManyRequests:
-		return &api.RateLimitedError{RetryAfter: retryAfter(resp.Header())}
+		return &tin.RateLimitedError{RetryAfter: retryAfter(resp.Header())}
 	default:
 		// VIES has no auth and no per-resource statuses, so everything else,
 		// including edge responses such as 403, is the register failing to
 		// answer.
-		return api.ErrServer.WithCode(status).WithMessage(msg)
+		return tin.ErrServer.WithCode(status).WithMessage(msg)
 	}
 }
 
