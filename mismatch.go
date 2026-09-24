@@ -40,7 +40,8 @@ func taxIDMismatch(id identifier, check *api.Check) *api.Mismatch {
 		return nil
 	}
 	return &api.Mismatch{
-		Path:     api.PathTaxID,
+		Field:    api.MismatchTaxID,
+		Path:     api.CodePath(api.PathTaxID),
 		Document: id.taxID.String(),
 		Register: echo.String(),
 	}
@@ -52,7 +53,7 @@ func nameMismatch(party *org.Party, rec *api.Record) *api.Mismatch {
 	if party.Name == "" || rec.Name == "" || api.NameMatches(rec.Name, party.Name) {
 		return nil
 	}
-	return &api.Mismatch{Path: "name", Document: party.Name, Register: rec.Name}
+	return &api.Mismatch{Field: api.MismatchName, Path: api.PathName, Document: party.Name, Register: rec.Name}
 }
 
 // identityMismatches compares each record identity with the party
@@ -69,7 +70,8 @@ func identityMismatches(ids []identifier, rec *api.Record) []*api.Mismatch {
 				continue
 			}
 			out = append(out, &api.Mismatch{
-				Path:     id.Path,
+				Field:    api.MismatchIdentity,
+				Path:     api.CodePath(id.Path),
 				Document: id.Code.String(),
 				Register: code.String(),
 			})

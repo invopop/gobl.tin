@@ -92,7 +92,7 @@ func TestPatch(t *testing.T) {
 		party := &org.Party{TaxID: tid}
 		v := report(party,
 			&Check{Path: PathTaxID, Status: StatusInvalid, Record: &Record{Name: "WRONG"}},
-			&Check{Path: "identities[0]", Status: StatusUnverified, Record: &Record{Name: "WRONG"}},
+			&Check{Path: "/identities/0", Status: StatusUnverified, Record: &Record{Name: "WRONG"}},
 		)
 		patch, err := v.Patch(Policy{})
 		require.NoError(t, err)
@@ -159,8 +159,8 @@ func TestPatch(t *testing.T) {
 			party := &org.Party{TaxID: tid}
 			v := report(party,
 				validCheck(nil),
-				&Check{Path: "identities[0]", Status: StatusValid, Record: &Record{Name: "FIRST"}},
-				&Check{Path: "identities[1]", Status: StatusValid, Record: &Record{Name: "SECOND"}},
+				&Check{Path: "/identities/0", Status: StatusValid, Record: &Record{Name: "FIRST"}},
+				&Check{Path: "/identities/1", Status: StatusValid, Record: &Record{Name: "SECOND"}},
 			)
 			patch, err := v.Patch(Policy{})
 			require.NoError(t, err)

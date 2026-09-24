@@ -97,16 +97,16 @@ func TestVerify(t *testing.T) {
 		require.Len(t, report.Checks, 2)
 
 		c := report.Checks[0]
-		assert.Equal(t, "tax_id", c.Path)
+		assert.Equal(t, "/tax_id", c.Path)
 		assert.Equal(t, StatusValid, c.Status)
 		assert.Equal(t, cbc.Key("vies"), c.Source)
 		require.NotNil(t, c.TaxID)
 		assert.Equal(t, "282741168", c.TaxID.Code.String())
 		require.Len(t, c.Mismatches, 1)
-		assert.Equal(t, &Mismatch{Path: "name", Document: "Acme Trading", Register: "ACME TRADING GMBH"}, c.Mismatches[0])
+		assert.Equal(t, &Mismatch{Field: api.MismatchName, Path: "/name", Document: "Acme Trading", Register: "ACME TRADING GMBH"}, c.Mismatches[0])
 
 		u := report.Checks[1]
-		assert.Equal(t, "identities[0]", u.Path)
+		assert.Equal(t, "/identities/0", u.Path)
 		assert.Equal(t, StatusUnsupported, u.Status)
 		assert.Empty(t, u.Source)
 		assert.True(t, u.CheckedAt.IsZero())
@@ -115,7 +115,7 @@ func TestVerify(t *testing.T) {
 
 		assert.True(t, report.Valid())
 		require.Len(t, fake.calls, 1)
-		assert.Equal(t, "tax_id", fake.calls[0].Path)
+		assert.Equal(t, "/tax_id", fake.calls[0].Path)
 	})
 
 	t.Run("normalizes before calling the verifier and keeps the party", func(t *testing.T) {
@@ -216,7 +216,7 @@ func TestVerify(t *testing.T) {
 		c := report.Checks[1]
 		assert.Equal(t, StatusValid, c.Status)
 		require.Len(t, c.Mismatches, 1)
-		assert.Equal(t, &Mismatch{Path: "identities[1]", Document: "0000000000", Register: "1234567890"}, c.Mismatches[0])
+		assert.Equal(t, &Mismatch{Field: api.MismatchIdentity, Path: "/identities/1/code", Document: "0000000000", Register: "1234567890"}, c.Mismatches[0])
 		assert.Equal(t, StatusUnsupported, report.Checks[2].Status)
 		assert.True(t, report.Valid())
 	})
@@ -229,7 +229,7 @@ func TestVerify(t *testing.T) {
 		require.NoError(t, err)
 		c := report.Checks[0]
 		require.Len(t, c.Mismatches, 1)
-		assert.Equal(t, &Mismatch{Path: "tax_id", Document: "DE282741168", Register: "DE999999999"}, c.Mismatches[0])
+		assert.Equal(t, &Mismatch{Field: api.MismatchTaxID, Path: "/tax_id/code", Document: "DE282741168", Register: "DE999999999"}, c.Mismatches[0])
 	})
 
 	t.Run("matching name is not a mismatch", func(t *testing.T) {
@@ -255,7 +255,7 @@ func TestVerifyTaxID(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		check, err := c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
 		require.NoError(t, err)
-		assert.Equal(t, "tax_id", check.Path)
+		assert.Equal(t, "/tax_id", check.Path)
 		assert.Equal(t, StatusValid, check.Status)
 		assert.Empty(t, check.Mismatches, "no party to compare the name with")
 		assert.Equal(t, "ACME GMBH", check.Record.Name)
@@ -284,7 +284,7 @@ func TestVerifyIdentity(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		check, err := c.VerifyIdentity(ctx, &org.Identity{Country: "GB", Type: "CRN", Code: "00445790"})
 		require.NoError(t, err)
-		assert.Equal(t, "identities[0]", check.Path)
+		assert.Equal(t, "/identities/0", check.Path)
 		assert.Equal(t, StatusValid, check.Status)
 		require.NotNil(t, check.Identity)
 		assert.Nil(t, check.TaxID)

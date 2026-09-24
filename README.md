@@ -104,17 +104,19 @@ type Verifier interface {
 
 A report has one check per identifier, in document order. A check carries:
 
-- `path`: where the identifier is in the party, `tax_id` or `identities[N]`.
+- `path`: the JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) of the identifier in the party, `/tax_id` or `/identities/N`.
 - `tax_id` or `identity`: the normalized identifier. For a `tax_id` check, VIES sets it to the identity the register echoes.
 - `status`: `valid`, `invalid`, `unsupported` or `unverified`.
 - `source`: the verifier that answered, for example `vies`. Empty when unsupported.
 - `checked_at`: when the register answered. Absent when unsupported.
 - `record`: what the register holds, when disclosed. VIES discloses the name for most member states; some always mask it.
-- `mismatches`: fields where the party disagrees with the record. Each names the `path`, the `document` value and the `register` value. The client compares the name with `NameMatches`, which folds case, punctuation and whitespace, and compares identifiers by normalized code.
+- `mismatches`: fields where the party disagrees with the record. Each carries a typed `field` (`name`, `tax_id`, `identity` or `address`), the JSON Pointer `path` of the value (`/name`, `/tax_id/code`, `/identities/N/code`), the `document` value and the `register` value. The client compares the name with `NameMatches`, which folds case, punctuation and whitespace, and compares identifiers by normalized code.
+
+Every path in a report is a JSON Pointer relative to the party document. Go consumers match on the typed values, `Check.TaxID`, `Check.Identity` and `Mismatch.Field`, rather than parsing paths; the pointer is for JSON consumers and for locating a value within an array.
 - `error`: the register failure message, only when the status is `unverified`. The Go error is available through `Check.Err()`.
 
 ```json
-{"checks":[{"path":"tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"path":"name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},{"path":"identities[0]","identity":{"country":"DE","type":"HRB","code":"12345"},"status":"unsupported"}]}
+{"checks":[{"path":"/tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"field":"name","path":"/name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},{"path":"/identities/0","identity":{"country":"DE","type":"HRB","code":"12345"},"status":"unsupported"}]}
 ```
 
 `Verification.Valid()` is true when every check that a verifier answered is `valid`. A report with an `invalid` or `unverified` check is not valid. A report where every check is `unsupported` is not valid either: no identifier is verified.
@@ -191,9 +193,9 @@ gobl.tin verify ./test/data/party.json
 ```
 
 ```
-tax_id: valid (vies)
-  name: document "Acme Trading", register "ACME TRADING GMBH"
-identities[0]: unsupported
+/tax_id: valid (vies)
+  /name: document "Acme Trading", register "ACME TRADING GMBH"
+/identities/0: unsupported
 ```
 
 For an invoice, `--party` selects the customer (the default), the supplier, or both. With `both`, each report is headed by its label:

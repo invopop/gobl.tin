@@ -63,16 +63,16 @@ func TestCheckJSON(t *testing.T) {
 			CheckedAt: when,
 			Record:    &Record{Name: "ACME TRADING GMBH"},
 			Mismatches: []*Mismatch{
-				{Path: "name", Document: "Acme Trading", Register: "ACME TRADING GMBH"},
+				{Field: MismatchName, Path: "/name", Document: "Acme Trading", Register: "ACME TRADING GMBH"},
 			},
 		},
-		{Path: "identities[0]", Status: StatusUnsupported},
+		{Path: "/identities/0", Status: StatusUnsupported},
 	}}
 	data, err := json.Marshal(v)
 	require.NoError(t, err)
 	want := `{"checks":[` +
-		`{"path":"tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"path":"name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},` +
-		`{"path":"identities[0]","status":"unsupported"}` +
+		`{"path":"/tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"field":"name","path":"/name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},` +
+		`{"path":"/identities/0","status":"unsupported"}` +
 		`]}`
 	assert.JSONEq(t, want, string(data))
 
@@ -81,6 +81,6 @@ func TestCheckJSON(t *testing.T) {
 		c.Fail(ErrNetwork.WithMessage("dial"))
 		data, err := json.Marshal(c)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"path":"tax_id","status":"unverified","source":"vies","error":"network: dial"}`, string(data))
+		assert.JSONEq(t, `{"path":"/tax_id","status":"unverified","source":"vies","error":"network: dial"}`, string(data))
 	})
 }

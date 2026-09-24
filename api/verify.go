@@ -51,7 +51,8 @@ const (
 
 // Check is the outcome for one identifier of a party.
 type Check struct {
-	// Path locates the identifier in the party: "tax_id" or "identities[N]".
+	// Path is the JSON Pointer of the identifier in the party: "/tax_id" or
+	// "/identities/N".
 	Path string `json:"path"`
 
 	// TaxID is the normalized tax identity when the identifier is the
@@ -113,10 +114,32 @@ type Record struct {
 	Status cbc.Key `json:"status,omitempty"`
 }
 
-// Mismatch is one field where the party disagrees with the record.
+// MismatchField names the kind of party field a mismatch is about.
+type MismatchField string
+
+// Mismatch fields.
+const (
+	// MismatchName is a disagreement on the party's name.
+	MismatchName MismatchField = "name"
+
+	// MismatchTaxID is a disagreement on the party's tax identity code.
+	MismatchTaxID MismatchField = "tax_id"
+
+	// MismatchIdentity is a disagreement on the code of one identity.
+	MismatchIdentity MismatchField = "identity"
+
+	// MismatchAddress is a disagreement on one address field.
+	MismatchAddress MismatchField = "address"
+)
+
+// Mismatch is one field where the party disagrees with the record. Go
+// consumers switch on Field; Path locates the value within arrays.
 type Mismatch struct {
-	// Path locates the field in the party, for example "name" or
-	// "identities[1]".
+	// Field is the kind of party field the mismatch is about.
+	Field MismatchField `json:"field"`
+
+	// Path is the JSON Pointer of the field in the party, for example
+	// "/name" or "/identities/1/code".
 	Path string `json:"path"`
 
 	// Document is the value in the party.

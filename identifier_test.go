@@ -34,7 +34,7 @@ func TestWalk(t *testing.T) {
 		ids := walk(party)
 		require.Len(t, ids, 3)
 
-		assert.Equal(t, "tax_id", ids[0].Path)
+		assert.Equal(t, "/tax_id", ids[0].Path)
 		assert.True(t, ids[0].IsTaxID())
 		assert.Equal(t, "DE", ids[0].Country.String())
 		assert.Empty(t, ids[0].Type)
@@ -42,7 +42,7 @@ func TestWalk(t *testing.T) {
 		require.NotNil(t, ids[0].taxID)
 		assert.Nil(t, ids[0].identity)
 
-		assert.Equal(t, "identities[0]", ids[1].Path)
+		assert.Equal(t, "/identities/0", ids[1].Path)
 		assert.False(t, ids[1].IsTaxID())
 		assert.Equal(t, "DE", ids[1].Country.String())
 		assert.Equal(t, "HRB", ids[1].Type.String())
@@ -50,7 +50,7 @@ func TestWalk(t *testing.T) {
 		assert.Nil(t, ids[1].taxID)
 		require.NotNil(t, ids[1].identity)
 
-		assert.Equal(t, "identities[2]", ids[2].Path, "the nil entry keeps its index")
+		assert.Equal(t, "/identities/2", ids[2].Path, "the nil entry keeps its index")
 		assert.Equal(t, "GB", ids[2].Country.String())
 		assert.Equal(t, "CRN", ids[2].Type.String())
 	})

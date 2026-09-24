@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strconv"
+
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 )
@@ -11,10 +13,17 @@ import (
 // party, so that a verifier can decide coverage and a Check can name the
 // field it describes. Consumers never construct an Identifier: the public
 // Client API takes GOBL types and does the walk.
+//
+// Every path in a report is an RFC 6901 JSON Pointer relative to the party
+// document, for example "/tax_id" or "/identities/1/code". Consumers that
+// match in Go use the typed values, Check.TaxID, Check.Identity and
+// Mismatch.Field, rather than parsing paths. The pointer segments here are
+// fixed field names and array indices, which never contain "/" or "~", so
+// the builders do no escaping.
 
 // Identifier is one identifier of a party as a verifier sees it.
 type Identifier struct {
-	// Path locates the identifier in the party: "tax_id" or "identities[N]".
+	// Path locates the identifier in the party: "/tax_id" or "/identities/N".
 	Path string
 
 	// Country is the tax country of the identifier.
@@ -36,4 +45,17 @@ func (id Identifier) IsTaxID() bool {
 }
 
 // PathTaxID is the path of a party's tax identity.
-const PathTaxID = "tax_id"
+const PathTaxID = "/tax_id"
+
+// PathName is the path of a party's name.
+const PathName = "/name"
+
+// IdentityPath returns the path of the identity at index i.
+func IdentityPath(i int) string {
+	return "/identities/" + strconv.Itoa(i)
+}
+
+// CodePath returns the path of the code field under an identifier path.
+func CodePath(path string) string {
+	return path + "/code"
+}

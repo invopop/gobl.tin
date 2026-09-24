@@ -77,32 +77,32 @@ func TestVerifyCommand(t *testing.T) {
 	t.Run("party document", func(t *testing.T) {
 		out, err := runVerify(t, allValid, "../../test/data/party.json")
 		require.NoError(t, err)
-		assert.Equal(t, "tax_id: valid (vies)\n"+
-			"  name: document \"Acme Trading\", register \"ACME TRADING GMBH\"\n"+
-			"identities[0]: unsupported\n", out)
+		assert.Equal(t, "/tax_id: valid (vies)\n"+
+			"  /name: document \"Acme Trading\", register \"ACME TRADING GMBH\"\n"+
+			"/identities/0: unsupported\n", out)
 	})
 
 	t.Run("invoice customer by default", func(t *testing.T) {
 		out, err := runVerify(t, allValid, "../../test/data/invoice-valid.json")
 		require.NoError(t, err)
-		assert.Equal(t, "tax_id: valid (vies)\n"+
-			"  name: document \"Sample Consumer\", register \"ACME TRADING GMBH\"\n", out)
+		assert.Equal(t, "/tax_id: valid (vies)\n"+
+			"  /name: document \"Sample Consumer\", register \"ACME TRADING GMBH\"\n", out)
 	})
 
 	t.Run("invoice supplier", func(t *testing.T) {
 		out, err := runVerify(t, allValid, "../../test/data/invoice-valid.json", "--party", "supplier")
 		require.NoError(t, err)
-		assert.Equal(t, "tax_id: valid (vies)\n", out)
+		assert.Equal(t, "/tax_id: valid (vies)\n", out)
 	})
 
 	t.Run("invoice both parties are labelled", func(t *testing.T) {
 		out, err := runVerify(t, allValid, "../../test/data/invoice-valid.json", "--party", "both")
 		require.NoError(t, err)
 		assert.Equal(t, "customer:\n"+
-			"  tax_id: valid (vies)\n"+
-			"    name: document \"Sample Consumer\", register \"ACME TRADING GMBH\"\n"+
+			"  /tax_id: valid (vies)\n"+
+			"    /name: document \"Sample Consumer\", register \"ACME TRADING GMBH\"\n"+
 			"supplier:\n"+
-			"  tax_id: valid (vies)\n", out)
+			"  /tax_id: valid (vies)\n", out)
 	})
 
 	t.Run("invalid check exits non-zero after printing", func(t *testing.T) {
@@ -110,25 +110,25 @@ func TestVerifyCommand(t *testing.T) {
 		out, err := runVerify(t, fake, "../../test/data/invoice-valid.json", "--party", "both")
 		assert.ErrorIs(t, err, errNotValid)
 		assert.Equal(t, "customer:\n"+
-			"  tax_id: invalid (vies)\n"+
+			"  /tax_id: invalid (vies)\n"+
 			"supplier:\n"+
-			"  tax_id: valid (vies)\n", out)
+			"  /tax_id: valid (vies)\n", out)
 	})
 
 	t.Run("unverified check prints the failure and exits non-zero", func(t *testing.T) {
 		fake := &fakeVIES{errs: map[cbc.Code]error{"282741168": api.ErrServer.WithCode("500").WithMessage("MS_UNAVAILABLE")}}
 		out, err := runVerify(t, fake, "../../test/data/party.json")
 		assert.ErrorIs(t, err, errNotValid)
-		assert.Equal(t, "tax_id: unverified (vies): server: 500: MS_UNAVAILABLE\n"+
-			"identities[0]: unsupported\n", out)
+		assert.Equal(t, "/tax_id: unverified (vies): server: 500: MS_UNAVAILABLE\n"+
+			"/identities/0: unsupported\n", out)
 	})
 
 	t.Run("json prints the report", func(t *testing.T) {
 		out, err := runVerify(t, allValid, "../../test/data/party.json", "--json")
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"checks":[`+
-			`{"path":"tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"path":"name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},`+
-			`{"path":"identities[0]","identity":{"country":"DE","type":"HRB","code":"12345"},"status":"unsupported"}`+
+			`{"path":"/tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"field":"name","path":"/name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},`+
+			`{"path":"/identities/0","identity":{"country":"DE","type":"HRB","code":"12345"},"status":"unsupported"}`+
 			`]}`, out)
 	})
 

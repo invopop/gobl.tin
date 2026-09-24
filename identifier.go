@@ -1,7 +1,6 @@
 package tin
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/invopop/gobl.tin/api"
@@ -59,7 +58,7 @@ func fromIdentity(i int, id *org.Identity) identifier {
 	cp := normalizeIdentity(id)
 	return identifier{
 		Identifier: api.Identifier{
-			Path:    fmt.Sprintf("identities[%d]", i),
+			Path:    api.IdentityPath(i),
 			Country: l10n.TaxCountryCode(cp.Country),
 			Key:     cp.Key,
 			Type:    cp.Type,
