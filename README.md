@@ -96,11 +96,11 @@ A verifier implements `tin.Verifier`:
 type Verifier interface {
 	Source() cbc.Key
 	Supports(id Identifier) bool
-	Verify(ctx context.Context, id Identifier) (*Answer, error)
+	Verify(ctx context.Context, req Request) (*Answer, error)
 }
 ```
 
-`Identifier` is the input a verifier receives: the path of the identifier in the party, whether it is the tax identity, its country, key, type and normalized code. Consumers never construct one; the client builds them from GOBL types.
+`Identifier` describes one identifier: its path in the party, whether it is the tax identity, its country, key, type and normalized code. `Supports` routes on it alone. `Request` is what `Verify` receives: the `Identifier` and the `Party` it belongs to, as read-only context for registers that need more than the code, such as a name. `Party` is nil for `VerifyTaxID` and `VerifyIdentity`; a verifier that needs it returns `ErrInput`. Consumers never construct either; the client builds them from GOBL types.
 
 `Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. Any status other than `valid` or `invalid`, including empty, makes the check `unverified`.
 

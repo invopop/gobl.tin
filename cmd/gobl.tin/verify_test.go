@@ -27,7 +27,8 @@ func (f *fakeVIES) Supports(id tin.Identifier) bool {
 	return id.Type == "" && id.Key == ""
 }
 
-func (f *fakeVIES) Verify(_ context.Context, id tin.Identifier) (*tin.Answer, error) {
+func (f *fakeVIES) Verify(_ context.Context, req tin.Request) (*tin.Answer, error) {
+	id := req.Identifier
 	if err, ok := f.errs[id.Code]; ok {
 		return nil, err
 	}

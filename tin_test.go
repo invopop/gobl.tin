@@ -20,7 +20,7 @@ type fakeVerifier struct {
 	supports func(Identifier) bool
 	checks   map[cbc.Code]*Answer
 	errs     map[cbc.Code]error
-	calls    []Identifier
+	calls    []Request
 }
 
 func (f *fakeVerifier) Source() cbc.Key { return f.source }
@@ -32,8 +32,9 @@ func (f *fakeVerifier) Supports(id Identifier) bool {
 	return f.supports(id)
 }
 
-func (f *fakeVerifier) Verify(_ context.Context, id Identifier) (*Answer, error) {
-	f.calls = append(f.calls, id)
+func (f *fakeVerifier) Verify(_ context.Context, req Request) (*Answer, error) {
+	f.calls = append(f.calls, req)
+	id := req.Identifier
 	if err, ok := f.errs[id.Code]; ok {
 		return nil, err
 	}
@@ -47,9 +48,9 @@ func (f *fakeVerifier) Verify(_ context.Context, id Identifier) (*Answer, error)
 // nilVerifier answers with a nil Answer and no error.
 type nilVerifier struct{}
 
-func (*nilVerifier) Source() cbc.Key                                     { return "nil" }
-func (*nilVerifier) Supports(Identifier) bool                            { return true }
-func (*nilVerifier) Verify(context.Context, Identifier) (*Answer, error) { return nil, nil }
+func (*nilVerifier) Source() cbc.Key                                  { return "nil" }
+func (*nilVerifier) Supports(Identifier) bool                         { return true }
+func (*nilVerifier) Verify(context.Context, Request) (*Answer, error) { return nil, nil }
 
 // taxOnly restricts a fake verifier to tax identities of the given countries.
 func taxOnly(countries ...l10n.TaxCountryCode) func(Identifier) bool {
@@ -118,7 +119,7 @@ func TestVerify(t *testing.T) {
 
 		assert.True(t, report.Valid())
 		require.Len(t, fake.calls, 1)
-		assert.Equal(t, "/tax_id", fake.calls[0].Path)
+		assert.Equal(t, "/tax_id", fake.calls[0].Identifier.Path)
 	})
 
 	t.Run("normalizes before calling the verifier and keeps the party", func(t *testing.T) {
@@ -127,8 +128,24 @@ func TestVerify(t *testing.T) {
 		report, err := New(fake).Verify(ctx, party)
 		require.NoError(t, err)
 		assert.Equal(t, StatusValid, report.Checks[0].Status)
-		assert.Equal(t, "282741168", fake.calls[0].Code.String())
+		assert.Equal(t, "282741168", fake.calls[0].Identifier.Code.String())
 		assert.Equal(t, "de 282-741-168", party.TaxID.Code.String())
+	})
+
+	t.Run("passes the party to the verifier as context", func(t *testing.T) {
+		fake := &fakeVerifier{source: "vies"}
+		party := &org.Party{
+			Name:       "Acme Trading",
+			TaxID:      &tax.Identity{Country: "DE", Code: "282741168"},
+			Identities: []*org.Identity{{Country: "GB", Type: "CRN", Code: "00445790"}},
+		}
+		_, err := New(fake).Verify(ctx, party)
+		require.NoError(t, err)
+		require.Len(t, fake.calls, 2)
+		for _, req := range fake.calls {
+			assert.Same(t, party, req.Party)
+		}
+		assert.Equal(t, "/identities/0", fake.calls[1].Identifier.Path)
 	})
 
 	t.Run("invalid is a status, not an error", func(t *testing.T) {
@@ -319,7 +336,8 @@ func TestVerifyTaxID(t *testing.T) {
 		check, err := c.VerifyTaxID(ctx, &tax.Identity{Country: "DE", Code: "282741168"})
 		require.NoError(t, err)
 		assert.Empty(t, check.Path, "no party document to point into")
-		assert.True(t, fake.calls[len(fake.calls)-1].IsTaxID())
+		assert.True(t, fake.calls[len(fake.calls)-1].Identifier.IsTaxID())
+		assert.Nil(t, fake.calls[len(fake.calls)-1].Party, "no party to pass")
 		assert.Equal(t, StatusValid, check.Status)
 		assert.Empty(t, check.Mismatches, "no party to compare the name with")
 		assert.Equal(t, "ACME GMBH", check.Record.Name)
@@ -368,6 +386,7 @@ func TestVerifyIdentity(t *testing.T) {
 		check, err := c.VerifyIdentity(ctx, &org.Identity{Country: "GB", Type: "CRN", Code: "00445790"})
 		require.NoError(t, err)
 		assert.Empty(t, check.Path, "no party document to point into")
+		assert.Nil(t, reg.calls[len(reg.calls)-1].Party, "no party to pass")
 		assert.Equal(t, StatusValid, check.Status)
 		require.NotNil(t, check.Identity)
 		assert.Nil(t, check.TaxID)

@@ -56,7 +56,7 @@ func (c *Client) Verify(ctx context.Context, party *org.Party) (*Report, error) 
 	ids := walk(party)
 	report := new(Report)
 	for _, id := range ids {
-		check := c.check(ctx, id)
+		check := c.check(ctx, id, party)
 		check.Mismatches = mismatches(party, ids, id, check)
 		report.Checks = append(report.Checks, check)
 	}
@@ -75,7 +75,7 @@ func (c *Client) VerifyTaxID(ctx context.Context, tid *tax.Identity) (*Check, er
 		return nil, ErrInput.WithMessage("no tax identity code provided")
 	}
 	id.Path = ""
-	check := c.check(ctx, id)
+	check := c.check(ctx, id, nil)
 	check.Mismatches = mismatches(nil, nil, id, check)
 	return check, nil
 }
@@ -92,7 +92,7 @@ func (c *Client) VerifyIdentity(ctx context.Context, oid *org.Identity) (*Check,
 		return nil, ErrInput.WithMessage("no identity code provided")
 	}
 	id.Path = ""
-	check := c.check(ctx, id)
+	check := c.check(ctx, id, nil)
 	check.Mismatches = mismatches(nil, nil, id, check)
 	return check, nil
 }
@@ -116,8 +116,8 @@ func (c *Client) SupportsIdentity(oid *org.Identity) bool {
 }
 
 // check runs the first verifier that supports the identifier and builds the
-// Check from its answer.
-func (c *Client) check(ctx context.Context, id identifier) *Check {
+// Check from its answer. The party is nil for a single identifier.
+func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Check {
 	check := &Check{Path: id.Path, TaxID: id.taxID, Identity: id.identity}
 	v := c.verifierFor(id.Identifier)
 	if v == nil {
@@ -125,7 +125,7 @@ func (c *Client) check(ctx context.Context, id identifier) *Check {
 		return check
 	}
 	check.Source = v.Source()
-	ans, err := v.Verify(ctx, id.Identifier)
+	ans, err := v.Verify(ctx, Request{Identifier: id.Identifier, Party: party})
 	switch {
 	case err != nil:
 		check.fail(err)

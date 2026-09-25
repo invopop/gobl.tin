@@ -10,7 +10,8 @@ import (
 )
 
 // ABOUT: A Verifier is one register client. It answers about one identifier
-// at a time and knows nothing about the party. The Client walks the party,
+// at a time and receives the party only as read-only context, for registers
+// that need more than the code, such as a name. The Client walks the party,
 // picks a verifier per identifier, and turns the answers into a report with
 // mismatches. Errors from Verify are reserved for the cases where the register
 // could not answer; an invalid identifier is a Check with StatusInvalid and a
@@ -25,10 +26,21 @@ type Verifier interface {
 	// Supports reports whether the register covers the identifier.
 	Supports(id Identifier) bool
 
-	// Verify asks the register about the identifier. ErrInput covers input
-	// the register rejects, ErrServer, ErrNetwork and RateLimitedError cover
-	// a register that cannot answer.
-	Verify(ctx context.Context, id Identifier) (*Answer, error)
+	// Verify asks the register about the request's identifier. ErrInput
+	// covers input the register rejects or lacks, ErrServer, ErrNetwork and
+	// RateLimitedError cover a register that cannot answer.
+	Verify(ctx context.Context, req Request) (*Answer, error)
+}
+
+// Request is what a Verifier receives: the identifier to answer for and the
+// party it belongs to.
+type Request struct {
+	// Identifier is the identifier to verify.
+	Identifier Identifier
+
+	// Party is the party the identifier belongs to. It is read only, and nil
+	// when a single identifier is verified without a party.
+	Party *org.Party
 }
 
 // Answer is what a register says about one identifier. The Client turns it

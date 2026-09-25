@@ -149,9 +149,11 @@ func (a *Verifier) Supports(id tin.Identifier) bool {
 	return id.IsTaxID() && id.Country.Code().In(countryCodes...)
 }
 
-// Verify checks the identifier against VIES. An unregistered number is an
-// Answer with StatusInvalid, not an error.
-func (a *Verifier) Verify(ctx context.Context, id tin.Identifier) (*tin.Answer, error) {
+// Verify checks the request's identifier against VIES. VIES answers from the
+// code alone, so the party is not read. An unregistered number is an Answer
+// with StatusInvalid, not an error.
+func (a *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, error) {
+	id := req.Identifier
 	out, err := a.checkVat(ctx, id.Country, id.Code)
 	if err != nil {
 		return nil, err
