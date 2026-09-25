@@ -345,6 +345,14 @@ func TestPatch(t *testing.T) {
 			assert.Equal(t, "Registered Office", got.Addresses[0].Label)
 		})
 
+		t.Run("replace skips nil record addresses", func(t *testing.T) {
+			party := &org.Party{Addresses: []*org.Address{billing}}
+			withNil := &Record{Addresses: []*org.Address{nil, rec.Addresses[0]}}
+			patch, err := patchOf(party, Policy{Addresses: AddressPolicyReplace}, validCheck(withNil))
+			require.NoError(t, err)
+			assert.Equal(t, `{"addresses":[{"label":"Registered Office","street":"Musterstr.","locality":"Berlin","country":"DE"}]}`, string(patch))
+		})
+
 		t.Run("replace without record addresses writes nothing", func(t *testing.T) {
 			party := &org.Party{Addresses: []*org.Address{billing}}
 			patch, err := patchOf(party, Policy{Name: NamePolicyKeep, Addresses: AddressPolicyReplace}, validCheck(&Record{Name: "ACME"}))

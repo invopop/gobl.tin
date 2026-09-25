@@ -189,10 +189,13 @@ func (v *patcher) patchAddresses(p AddressPolicy) ([]*org.Address, error) {
 	case "", AddressPolicyNone:
 		return nil, nil
 	case AddressPolicyReplace:
-		if len(recorded) == 0 {
-			return nil, nil
+		var out []*org.Address
+		for _, r := range recorded {
+			if r != nil {
+				out = append(out, r)
+			}
 		}
-		return recorded, nil
+		return out, nil
 	case AddressPolicyAppend:
 	default:
 		return nil, ErrInput.WithMsgf("unknown address policy %q", p)
