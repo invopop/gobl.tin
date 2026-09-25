@@ -1,0 +1,68 @@
+package tin
+
+import (
+	"strconv"
+
+	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/l10n"
+)
+
+// ABOUT: Identifier describes one identifier of a party to a Verifier. The
+// Client builds one per identifier: the tax_id and each entry of
+// identities. It carries the normalized code and the position of the
+// identifier in the party, so that a verifier can decide coverage and a
+// Check can name the field it describes. Consumers never construct an
+// Identifier: the public Client API takes GOBL types and does the walk.
+//
+// The pointer segments here are fixed field names and array indices, which
+// never contain "/" or "~", so the builders do no escaping.
+
+// Identifier is one identifier of a party as a verifier sees it.
+type Identifier struct {
+	// Path locates the identifier in the party: "/tax_id" or "/identities/N".
+	// Empty when a single identifier is verified without a party document.
+	Path string
+
+	// TaxID marks the party's tax identity as opposed to one of its
+	// identities.
+	TaxID bool
+
+	// Country is the tax country of the identifier.
+	Country l10n.TaxCountryCode
+
+	// Key is the org.Identity key, empty for a tax identity.
+	Key cbc.Key
+
+	// Type is the org.Identity type, empty for a tax identity.
+	Type cbc.Code
+
+	// Code is the normalized code of the identifier.
+	Code cbc.Code
+}
+
+// IsTaxID reports whether the identifier is the party's tax identity.
+func (id Identifier) IsTaxID() bool {
+	return id.TaxID
+}
+
+// PathTaxID is the path of a party's tax identity.
+const PathTaxID = "/tax_id"
+
+// PathName is the path of a party's name.
+const PathName = "/name"
+
+// IdentityPath returns the path of the identity at index i.
+func IdentityPath(i int) string {
+	return "/identities/" + strconv.Itoa(i)
+}
+
+// CodePath returns the path of the code field under an identifier path.
+func CodePath(path string) string {
+	return path + "/code"
+}
+
+// CountryPath returns the path of the country field under an identifier
+// path.
+func CountryPath(path string) string {
+	return path + "/country"
+}

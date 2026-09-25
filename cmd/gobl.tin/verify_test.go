@@ -1,0 +1,235 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"testing"
+	"time"
+
+	tin "github.com/invopop/gobl.tin"
+	"github.com/invopop/gobl/cbc"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// fakeVIES stands in for the VIES verifier with canned answers by code, so
+// that the command never dials the register.
+type fakeVIES struct {
+	checks map[cbc.Code]*tin.Answer
+	errs   map[cbc.Code]error
+}
+
+func (f *fakeVIES) Source() cbc.Key { return "vies" }
+
+func (f *fakeVIES) Supports(id tin.Identifier) bool {
+	return id.Type == "" && id.Key == ""
+}
+
+func (f *fakeVIES) Verify(_ context.Context, req tin.Request) (*tin.Answer, error) {
+	id := req.Identifier
+	if err, ok := f.errs[id.Code]; ok {
+		return nil, err
+	}
+	if c, ok := f.checks[id.Code]; ok {
+		cp := *c
+		return &cp, nil
+	}
+	return &tin.Answer{Status: tin.StatusInvalid, CheckedAt: time.Now()}, nil
+}
+
+var checkedAt = time.Date(2026, 9, 24, 9, 12, 0, 0, time.UTC)
+
+func validCheck(name string) *tin.Answer {
+	c := &tin.Answer{Status: tin.StatusValid, CheckedAt: checkedAt}
+	if name != "" {
+		c.Record = &tin.Record{Name: name}
+	}
+	return c
+}
+
+// runVerify executes the verify command with the fake and returns stdout and
+// the error. stderr is discarded; use runVerifyStderr to read it.
+func runVerify(t *testing.T, fake *fakeVIES, args ...string) (string, error) {
+	t.Helper()
+	out, _, err := runVerifyStderr(t, fake, args...)
+	return out, err
+}
+
+// runVerifyStderr executes the verify command with the fake and returns
+// stdout, stderr and the error.
+func runVerifyStderr(t *testing.T, fake *fakeVIES, args ...string) (string, string, error) {
+	t.Helper()
+	cmd := &cobra.Command{SilenceUsage: true, SilenceErrors: true}
+	vo := verify(&rootOpts{})
+	if fake != nil {
+		vo.verifiers = []tin.Verifier{fake}
+	}
+	cmd.AddCommand(vo.cmd())
+	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
+	cmd.SetOut(out)
+	cmd.SetErr(errOut)
+	cmd.SetArgs(append([]string{"verify"}, args...))
+	err := cmd.Execute()
+	return out.String(), errOut.String(), err
+}
+
+func TestVerifyCommand(t *testing.T) {
+	// The customer of invoice-valid.json is 282741168 and the supplier is
+	// 111111125; party.json carries 282741168 and an HRB identity.
+	allValid := &fakeVIES{checks: map[cbc.Code]*tin.Answer{
+		"282741168": validCheck("ACME TRADING GMBH"),
+		"111111125": validCheck(""),
+	}}
+
+	t.Run("party document", func(t *testing.T) {
+		out, err := runVerify(t, allValid, "../../test/data/party.json")
+		require.NoError(t, err)
+		assert.Equal(t, "/tax_id: valid (vies)\n"+
+			"  /name: document \"Acme Trading\", register \"ACME TRADING GMBH\"\n"+
+			"/identities/0: unsupported\n", out)
+	})
+
+	t.Run("invoice customer by default", func(t *testing.T) {
+		out, err := runVerify(t, allValid, "../../test/data/invoice-valid.json")
+		require.NoError(t, err)
+		assert.Equal(t, "/tax_id: valid (vies)\n"+
+			"  /name: document \"Sample Consumer\", register \"ACME TRADING GMBH\"\n", out)
+	})
+
+	t.Run("invoice supplier", func(t *testing.T) {
+		out, err := runVerify(t, allValid, "../../test/data/invoice-valid.json", "--party", "supplier")
+		require.NoError(t, err)
+		assert.Equal(t, "/tax_id: valid (vies)\n", out)
+	})
+
+	t.Run("invoice both parties are labelled", func(t *testing.T) {
+		out, err := runVerify(t, allValid, "../../test/data/invoice-valid.json", "--party", "both")
+		require.NoError(t, err)
+		assert.Equal(t, "customer:\n"+
+			"  /tax_id: valid (vies)\n"+
+			"    /name: document \"Sample Consumer\", register \"ACME TRADING GMBH\"\n"+
+			"supplier:\n"+
+			"  /tax_id: valid (vies)\n", out)
+	})
+
+	t.Run("invalid check exits 1 after printing", func(t *testing.T) {
+		fake := &fakeVIES{checks: map[cbc.Code]*tin.Answer{"111111125": validCheck("")}}
+		out, err := runVerify(t, fake, "../../test/data/invoice-valid.json", "--party", "both")
+		assert.ErrorIs(t, err, errInvalid)
+		assert.Equal(t, exitInvalid, exitCode(err))
+		assert.Equal(t, "customer:\n"+
+			"  /tax_id: invalid (vies)\n"+
+			"supplier:\n"+
+			"  /tax_id: valid (vies)\n", out)
+	})
+
+	t.Run("unverified check prints the failure and exits 2", func(t *testing.T) {
+		fake := &fakeVIES{errs: map[cbc.Code]error{"282741168": tin.ErrServer.WithCode("500").WithMessage("MS_UNAVAILABLE")}}
+		out, err := runVerify(t, fake, "../../test/data/party.json")
+		assert.ErrorIs(t, err, errUnverified)
+		assert.Equal(t, exitUnverified, exitCode(err))
+		assert.Equal(t, "/tax_id: unverified (vies): server: 500: MS_UNAVAILABLE\n"+
+			"/identities/0: unsupported\n", out)
+	})
+
+	t.Run("json prints the report", func(t *testing.T) {
+		out, err := runVerify(t, allValid, "../../test/data/party.json", "--json")
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"checks":[`+
+			`{"path":"/tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"field":"name","path":"/name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},`+
+			`{"path":"/identities/0","identity":{"country":"DE","type":"HRB","code":"12345"},"status":"unsupported"}`+
+			`]}`, out)
+	})
+
+	t.Run("json with both parties is keyed by label", func(t *testing.T) {
+		out, err := runVerify(t, allValid, "../../test/data/invoice-valid.json", "--party", "both", "--json")
+		require.NoError(t, err)
+		var got map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(out), &got))
+		assert.Len(t, got, 2)
+		assert.Contains(t, got, "customer")
+		assert.Contains(t, got, "supplier")
+	})
+
+	t.Run("valid exits 0", func(t *testing.T) {
+		_, err := runVerify(t, allValid, "../../test/data/party.json")
+		require.NoError(t, err)
+		assert.Equal(t, exitValid, exitCode(err))
+	})
+
+	t.Run("unverified wins over invalid", func(t *testing.T) {
+		fake := &fakeVIES{errs: map[cbc.Code]error{"111111125": tin.ErrNetwork.WithMessage("dial")}}
+		_, err := runVerify(t, fake, "../../test/data/invoice-valid.json", "--party", "both")
+		assert.Equal(t, exitUnverified, exitCode(err))
+	})
+
+	t.Run("party without identifiers exits 1 with a notice", func(t *testing.T) {
+		out, stderr, err := runVerifyStderr(t, allValid, "../../test/data/party-empty.json")
+		assert.Equal(t, exitInvalid, exitCode(err))
+		assert.Empty(t, out)
+		assert.Equal(t, "no identifiers to verify\n", stderr)
+	})
+
+	t.Run("party flag on a party document warns", func(t *testing.T) {
+		_, stderr, err := runVerifyStderr(t, allValid, "../../test/data/party.json", "--party", "supplier")
+		require.NoError(t, err)
+		assert.Equal(t, "warning: --party is ignored for a party document\n", stderr)
+	})
+
+	t.Run("missing customer exits 3", func(t *testing.T) {
+		_, err := runVerify(t, allValid, "../../test/data/invoice-no-customer.json")
+		assert.EqualError(t, err, "invoice has no customer")
+		assert.Equal(t, exitUsage, exitCode(err))
+	})
+
+	t.Run("unparseable input exits 3", func(t *testing.T) {
+		_, err := runVerify(t, allValid, "../../go.mod")
+		assert.Error(t, err)
+		assert.Equal(t, exitUsage, exitCode(err))
+	})
+
+	t.Run("unknown party selector", func(t *testing.T) {
+		_, err := runVerify(t, allValid, "../../test/data/invoice-valid.json", "--party", "everyone")
+		assert.EqualError(t, err, `invalid party "everyone", expected customer, supplier or both`)
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		_, err := runVerify(t, allValid, "../../test/data/does-not-exist.json")
+		assert.Error(t, err)
+	})
+
+	t.Run("argument count exits 3", func(t *testing.T) {
+		_, err := runVerify(t, allValid)
+		assert.Error(t, err)
+		assert.Equal(t, exitUsage, exitCode(err))
+		_, err = runVerify(t, allValid, "a", "b")
+		assert.Error(t, err)
+		assert.Equal(t, exitUsage, exitCode(err))
+	})
+}
+
+func TestOutcome(t *testing.T) {
+	t.Run("reports every party without identifiers after an unverified one", func(t *testing.T) {
+		unverified := &tin.Report{Checks: []*tin.Check{{Path: "/tax_id", Status: tin.StatusUnverified}}}
+		var stderr bytes.Buffer
+		err := outcome(&stderr, []labelled{
+			{label: partyCustomer, report: unverified},
+			{label: partySupplier, report: &tin.Report{}},
+		})
+		assert.Equal(t, exitUnverified, exitCode(err))
+		assert.Equal(t, "supplier: no identifiers to verify\n", stderr.String())
+	})
+
+	t.Run("an invalid party after an unverified one keeps exit 2", func(t *testing.T) {
+		unverified := &tin.Report{Checks: []*tin.Check{{Path: "/tax_id", Status: tin.StatusUnverified}}}
+		invalid := &tin.Report{Checks: []*tin.Check{{Path: "/tax_id", Status: tin.StatusInvalid}}}
+		err := outcome(io.Discard, []labelled{
+			{label: partyCustomer, report: unverified},
+			{label: partySupplier, report: invalid},
+		})
+		assert.Equal(t, exitUnverified, exitCode(err))
+	})
+}
