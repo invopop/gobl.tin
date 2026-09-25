@@ -37,10 +37,10 @@ import (
 
 func main() {
 	party := &org.Party{
-		Name:  "Acme Trading",
-		TaxID: &tax.Identity{Country: "DE", Code: "282741168"},
+		Name:  "Google Ireland",
+		TaxID: &tax.Identity{Country: "IE", Code: "6388047V"},
 		Identities: []*org.Identity{
-			{Country: "DE", Type: "HRB", Code: "12345"},
+			{Country: "IE", Type: "CRO", Code: "368047"},
 		},
 	}
 
@@ -120,7 +120,7 @@ A report has one check per identifier, in document order. A check carries:
 Every path is a JSON Pointer relative to the party document. A consumer that patches an invoice prefixes the party's location, `/customer` or `/supplier`. Go consumers match on the typed values, `Check.TaxID`, `Check.Identity` and `Mismatch.Field`, rather than parsing paths; the pointer is for JSON consumers and for locating a value within an array.
 
 ```json
-{"checks":[{"path":"/tax_id","tax_id":{"country":"DE","code":"282741168"},"status":"valid","source":"vies","checked_at":"2026-09-24T09:12:00Z","record":{"name":"ACME TRADING GMBH"},"mismatches":[{"field":"name","path":"/name","document":"Acme Trading","register":"ACME TRADING GMBH"}]},{"path":"/identities/0","identity":{"country":"DE","type":"HRB","code":"12345"},"status":"unsupported"}]}
+{"checks":[{"path":"/tax_id","tax_id":{"country":"IE","code":"6388047V"},"status":"valid","source":"vies","checked_at":"2026-09-25T09:06:48Z","record":{"name":"GOOGLE IRELAND LIMITED"},"mismatches":[{"field":"name","path":"/name","document":"Google Ireland","register":"GOOGLE IRELAND LIMITED"}]},{"path":"/identities/0","identity":{"country":"IE","type":"CRO","code":"368047"},"status":"unsupported"}]}
 ```
 
 `Report.Valid()` is true when every check that a verifier answered is `valid`. A report with an `invalid` or `unverified` check is not valid. A report where every check is `unsupported` is not valid either: no identifier is verified.
@@ -139,7 +139,7 @@ patch, err := tin.Patch(party, report, tin.Policy{
 	Identities: tin.IdentitiesPolicyAddMissing,
 	Addresses:  tin.AddressPolicyAppend,
 })
-// patch: {"name":"ACME TRADING GMBH"}
+// patch: {"name":"GOOGLE IRELAND LIMITED"}
 ```
 
 Records are read in report order. The first valid record that has a value for a field wins. Records behind `invalid`, `unverified` or `unsupported` checks are never read.
@@ -203,8 +203,14 @@ gobl.tin verify ./test/data/party.json
 
 ```
 /tax_id: valid (vies)
-  /name: document "Acme Trading", register "ACME TRADING GMBH"
 /identities/0: unsupported
+```
+
+Germany does not disclose names through VIES, so this check has no record and no name comparison. For a member state that discloses the name, a difference prints as an indented mismatch line:
+
+```
+/tax_id: valid (vies)
+  /name: document "Google Ireland", register "GOOGLE IRELAND LIMITED"
 ```
 
 Exit codes:

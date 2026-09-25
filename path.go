@@ -7,12 +7,12 @@ import (
 	"github.com/invopop/gobl/l10n"
 )
 
-// ABOUT: Identifier is the input a Verifier receives. The Client builds one
-// per identifier of a party: the tax_id and each entry of identities. It
-// carries the normalized code and the position of the identifier in the
-// party, so that a verifier can decide coverage and a Check can name the
-// field it describes. Consumers never construct an Identifier: the public
-// Client API takes GOBL types and does the walk.
+// ABOUT: Identifier describes one identifier of a party to a Verifier. The
+// Client builds one per identifier: the tax_id and each entry of
+// identities. It carries the normalized code and the position of the
+// identifier in the party, so that a verifier can decide coverage and a
+// Check can name the field it describes. Consumers never construct an
+// Identifier: the public Client API takes GOBL types and does the walk.
 //
 // The pointer segments here are fixed field names and array indices, which
 // never contain "/" or "~", so the builders do no escaping.

@@ -31,8 +31,8 @@ var (
 	ErrServer = NewError("server")
 
 	// ErrInput is returned when the input is malformed or incomplete: a
-	// missing tax ID, an empty code, or a request the register rejected as
-	// badly formed.
+	// missing tax ID, an empty code, party data a register needs but the
+	// request lacks, or a request the register rejected as badly formed.
 	ErrInput = NewError("input")
 )
 
