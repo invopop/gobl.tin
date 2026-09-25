@@ -122,10 +122,10 @@ func outcome(stderr io.Writer, reports []labelled) error {
 		}
 		for _, c := range r.report.Checks {
 			if c.Status == tin.StatusUnverified {
-				return errUnverified
+				err = errUnverified
 			}
 		}
-		if !r.report.Valid() {
+		if err != errUnverified && !r.report.Valid() {
 			err = errInvalid
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
@@ -207,5 +208,28 @@ func TestVerifyCommand(t *testing.T) {
 		_, err = runVerify(t, allValid, "a", "b")
 		assert.Error(t, err)
 		assert.Equal(t, exitUsage, exitCode(err))
+	})
+}
+
+func TestOutcome(t *testing.T) {
+	t.Run("reports every party without identifiers after an unverified one", func(t *testing.T) {
+		unverified := &tin.Report{Checks: []*tin.Check{{Path: "/tax_id", Status: tin.StatusUnverified}}}
+		var stderr bytes.Buffer
+		err := outcome(&stderr, []labelled{
+			{label: partyCustomer, report: unverified},
+			{label: partySupplier, report: &tin.Report{}},
+		})
+		assert.Equal(t, exitUnverified, exitCode(err))
+		assert.Equal(t, "supplier: no identifiers to verify\n", stderr.String())
+	})
+
+	t.Run("an invalid party after an unverified one keeps exit 2", func(t *testing.T) {
+		unverified := &tin.Report{Checks: []*tin.Check{{Path: "/tax_id", Status: tin.StatusUnverified}}}
+		invalid := &tin.Report{Checks: []*tin.Check{{Path: "/tax_id", Status: tin.StatusInvalid}}}
+		err := outcome(io.Discard, []labelled{
+			{label: partyCustomer, report: unverified},
+			{label: partySupplier, report: invalid},
+		})
+		assert.Equal(t, exitUnverified, exitCode(err))
 	})
 }
