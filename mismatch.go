@@ -2,7 +2,6 @@ package tin
 
 import (
 	"strings"
-	"unicode"
 
 	"github.com/invopop/gobl/org"
 )
@@ -67,14 +66,4 @@ func nameMismatch(party *org.Party, rec *Record) *Mismatch {
 		return nil
 	}
 	return &Mismatch{Field: MismatchName, Path: PathName, Document: party.Name, Register: name}
-}
-
-// hasLetterOrDigit reports whether s holds at least one letter or digit.
-func hasLetterOrDigit(s string) bool {
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			return true
-		}
-	}
-	return false
 }
