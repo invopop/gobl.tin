@@ -198,3 +198,16 @@ func TestPatch(t *testing.T) {
 		assert.Equal(t, []*org.Address{office}, got.Addresses, "the first address is replaced, a single one included")
 	})
 }
+
+// TestPatchSkipsAnEchoedOtherTaxID checks a valid check whose register
+// echoed a different tax ID writes nothing: its record describes another
+// party.
+func TestPatchSkipsAnEchoedOtherTaxID(t *testing.T) {
+	party := &org.Party{Name: "Acme", TaxID: &tax.Identity{Country: "DE", Code: "282741168"}}
+	check := validCheck(&Record{Name: "OTHER GMBH"})
+	check.Mismatches = []*Mismatch{{Field: MismatchTaxID, Path: "/tax_id/code", Document: "282741168", Register: "111111125"}}
+
+	patch, err := patchOf(party, check)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, string(patch))
+}

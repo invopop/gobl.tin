@@ -418,21 +418,19 @@ func TestVerifier(t *testing.T) {
 // disclosed name, never a masked "---" name, and never the free-text
 // address.
 func TestPatchFromVIES(t *testing.T) {
-	party := func() *org.Party {
-		return &org.Party{Name: "Invopop", TaxID: &tax.Identity{Country: "ES", Code: "B85905495"}}
-	}
 	tests := []struct {
 		name string
+		tid  *tax.Identity
 		body string
 		want string
 	}{
-		{"masked name and address write nothing", viesValidBody, `{}`},
-		{"disclosed name is written, the address text is not", viesValidNamedBody, `{"name":"ACME GMBH"}`},
+		{"masked name and address write nothing", &tax.Identity{Country: "ES", Code: "B85905495"}, viesValidBody, `{}`},
+		{"disclosed name is written, the address text is not", &tax.Identity{Country: "DE", Code: "282741168"}, viesValidNamedBody, `{"name":"ACME GMBH"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tin.New(serve(t, http.StatusOK, tt.body, nil))
-			p := party()
+			p := &org.Party{Name: "Invopop", TaxID: tt.tid}
 			report, err := c.Verify(context.Background(), p)
 			require.NoError(t, err)
 			require.Equal(t, tin.StatusValid, report.Checks[0].Status)

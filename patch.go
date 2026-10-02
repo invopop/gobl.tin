@@ -105,15 +105,27 @@ func patchAddresses(party *org.Party, report *Report) []*org.Address {
 	return nil
 }
 
-// validRecords lists the records behind valid checks, in report order.
+// validRecords lists the records behind valid checks, in report order. A
+// check whose register echoed a different tax ID describes another party, so
+// its record never feeds the patch.
 func validRecords(report *Report) []*Record {
 	var out []*Record
 	for _, c := range report.Checks {
-		if c != nil && c.Status == StatusValid && c.Record != nil {
+		if c != nil && c.Status == StatusValid && c.Record != nil && !hasMismatch(c, MismatchTaxID) {
 			out = append(out, c.Record)
 		}
 	}
 	return out
+}
+
+// hasMismatch reports whether the check carries a mismatch on the field.
+func hasMismatch(c *Check, field MismatchField) bool {
+	for _, m := range c.Mismatches {
+		if m != nil && m.Field == field {
+			return true
+		}
+	}
+	return false
 }
 
 // postal is the comparable projection of an address: the fields that place
