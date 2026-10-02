@@ -12,10 +12,11 @@ import (
 var nameElide = regexp.MustCompile(`[.'’]+`)
 
 // NameMatches reports whether two names agree once case, punctuation and
-// surrounding whitespace are folded. It compares; it never rewrites.
+// surrounding whitespace are folded. Case is compared with Unicode case
+// folding, so "STRAßE" and "STRAẞE" agree. It compares; it never rewrites.
 func NameMatches(a, b string) bool {
 	na := normalizeName(a)
-	return na != "" && na == normalizeName(b)
+	return na != "" && strings.EqualFold(na, normalizeName(b))
 }
 
 // normalizeName reduces a name to a comparison key. It keeps letters and

@@ -15,6 +15,7 @@ func TestNameMatches(t *testing.T) {
 	}{
 		{name: "identical", a: "ACME GMBH", b: "ACME GMBH", want: true},
 		{name: "case folded", a: "ACME GMBH", b: "Acme GmbH", want: true},
+		{name: "unicode case folded", a: "STRAßE GMBH", b: "STRAẞE GmbH", want: true},
 		{name: "punctuation elided", a: "A.C.M.E. GMBH", b: "ACME GmbH", want: true},
 		{name: "apostrophes elided", a: "O'BRIEN LTD", b: "O’Brien Ltd", want: true},
 		{name: "ampersand folded", a: "SMITH & SONS", b: "Smith and Sons", want: true},
