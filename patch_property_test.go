@@ -32,7 +32,7 @@ func TestPatchInvariants(t *testing.T) {
 
 	for _, party := range parties {
 		for _, rec := range records {
-			report := &Report{Checks: []*Check{{Path: PathTaxID, Status: StatusValid, Source: "vies", Record: rec}}}
+			report := &Report{Checks: []*Check{{Path: PathTaxID, TaxID: party.TaxID, Status: StatusValid, Source: "vies", Record: rec}}}
 			patch, err := Patch(party, report)
 			require.NoError(t, err)
 			got := applyPatch(t, party, patch)

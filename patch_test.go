@@ -46,8 +46,15 @@ func applyPatch(t *testing.T, party *org.Party, patch json.RawMessage) *org.Part
 	return out
 }
 
-// patchOf builds a report from the checks and patches the party with it.
+// patchOf builds a report from the checks and patches the party with it. A
+// check without a tax ID is a check of the party's own tax ID, as Verify
+// builds it.
 func patchOf(party *org.Party, checks ...*Check) (json.RawMessage, error) {
+	for _, c := range checks {
+		if c != nil && c.TaxID == nil {
+			c.TaxID = party.TaxID
+		}
+	}
 	return Patch(party, &Report{Checks: checks})
 }
 
@@ -205,9 +212,32 @@ func TestPatch(t *testing.T) {
 func TestPatchSkipsAnEchoedOtherTaxID(t *testing.T) {
 	party := &org.Party{Name: "Acme", TaxID: &tax.Identity{Country: "DE", Code: "282741168"}}
 	check := validCheck(&Record{Name: "OTHER GMBH"})
-	check.Mismatches = []*Mismatch{{Field: MismatchTaxID, Path: "/tax_id/code", Document: "282741168", Register: "111111125"}}
+	check.TaxID = &tax.Identity{Country: "DE", Code: "111111125"}
 
 	patch, err := patchOf(party, check)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{}`, string(patch))
+}
+
+// TestPatchSkipsAReportForAnotherParty checks a report built for one party
+// writes nothing into another party, and nothing into a party without a tax
+// ID.
+func TestPatchSkipsAReportForAnotherParty(t *testing.T) {
+	report := &Report{Checks: []*Check{{
+		Path: PathTaxID, Status: StatusValid, Source: "vies",
+		TaxID:  &tax.Identity{Country: "DE", Code: "282741168"},
+		Record: &Record{Name: "ACME GMBH"},
+	}}}
+	for name, party := range map[string]*org.Party{
+		"another tax ID": {Name: "Other", TaxID: &tax.Identity{Country: "FR", Code: "44732829320"}},
+		"no tax ID":      {Name: "Other"},
+	} {
+		patch, err := Patch(party, report)
+		require.NoError(t, err, name)
+		assert.JSONEq(t, `{}`, string(patch), name)
+	}
+	same := &org.Party{Name: "Acme", TaxID: &tax.Identity{Country: "de", Code: "DE 282741168"}}
+	patch, err := Patch(same, report)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"name":"ACME GMBH"}`, string(patch), "the same tax ID in another spelling still matches")
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
+	"github.com/invopop/gobl/tax"
 )
 
 // ABOUT: A patch is an RFC 7396 JSON merge patch on the party, with what the
@@ -46,7 +47,7 @@ func Patch(party *org.Party, report *Report) (json.RawMessage, error) {
 // party's, or empty. The name is trimmed, and one with no letter or digit,
 // such as a "---" placeholder, is no name.
 func patchName(party *org.Party, report *Report) string {
-	for _, rec := range validRecords(report) {
+	for _, rec := range validRecords(party, report) {
 		name := strings.TrimSpace(rec.Name)
 		if !hasLetterOrDigit(name) {
 			continue
@@ -75,7 +76,7 @@ func hasLetterOrDigit(s string) bool {
 // otherwise it replaces the first address. A merge patch replaces arrays
 // whole, so the party's other addresses are carried along.
 func patchAddresses(party *org.Party, report *Report) []*org.Address {
-	for _, rec := range validRecords(report) {
+	for _, rec := range validRecords(party, report) {
 		if rec.Address == nil || postalOf(rec.Address) == (postal{}) {
 			// An address with no postal field is no address.
 			continue
@@ -105,27 +106,29 @@ func patchAddresses(party *org.Party, report *Report) []*org.Address {
 	return nil
 }
 
-// validRecords lists the records behind valid checks, in report order. A
-// check whose register echoed a different tax ID describes another party, so
-// its record never feeds the patch.
-func validRecords(report *Report) []*Record {
+// validRecords lists the records behind valid checks of the party's own tax
+// ID, in report order. A check's tax ID is the one the register echoed, so a
+// check for another tax ID, because the register answered for another one or
+// the report belongs to another party, describes another party and never
+// feeds the patch.
+func validRecords(party *org.Party, report *Report) []*Record {
 	var out []*Record
 	for _, c := range report.Checks {
-		if c != nil && c.Status == StatusValid && c.Record != nil && !hasMismatch(c, MismatchTaxID) {
+		if c != nil && c.Status == StatusValid && c.Record != nil && sameTaxID(c.TaxID, party.TaxID) {
 			out = append(out, c.Record)
 		}
 	}
 	return out
 }
 
-// hasMismatch reports whether the check carries a mismatch on the field.
-func hasMismatch(c *Check, field MismatchField) bool {
-	for _, m := range c.Mismatches {
-		if m != nil && m.Field == field {
-			return true
-		}
+// sameTaxID reports whether two tax identities name the same country and
+// code once normalized. A missing identity matches nothing.
+func sameTaxID(a, b *tax.Identity) bool {
+	if a == nil || b == nil {
+		return false
 	}
-	return false
+	na, nb := normalizeTaxID(a), normalizeTaxID(b)
+	return na.Country == nb.Country && na.Code == nb.Code
 }
 
 // postal is the comparable projection of an address: the fields that place
