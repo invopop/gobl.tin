@@ -238,16 +238,17 @@ func (a *Verifier) checkVat(ctx context.Context, country l10n.TaxCountryCode, co
 	if err := json.Unmarshal(resp.Body(), out); err != nil {
 		return nil, tin.ErrNetwork.WithCode(status).WithMessage("decoding response").WithCause(err)
 	}
+	if len(out.ErrorWrappers) > 0 {
+		// VIES reports a failure with status 200 and an errorWrappers list,
+		// whatever the valid field says.
+		return nil, failureError(status, out.ErrorWrappers[0])
+	}
 	if out.UserError != "" && out.UserError != "VALID" && out.UserError != "INVALID" {
 		// A failure in the flat shape: the valid field is false although
 		// VIES never checked the number.
 		return nil, failureError(status, viesFailure{Error: out.UserError})
 	}
 	if out.Valid == nil {
-		// VIES reports a failure with status 200 and an errorWrappers list.
-		if len(out.ErrorWrappers) > 0 {
-			return nil, failureError(status, out.ErrorWrappers[0])
-		}
 		return nil, tin.ErrNetwork.WithCode(status).WithMessage("response carries no validity field")
 	}
 	return out, nil
@@ -326,14 +327,14 @@ func errorMessage(body []byte) string {
 // untrusted body cannot make a failure arbitrarily large.
 const maxMessage = 200
 
-// clamp cuts s to maxMessage bytes. Cutting on a byte boundary can split a
-// multibyte rune; the partial sequence is dropped rather than emitted as
-// invalid UTF-8.
+// clamp cuts s to maxMessage bytes and drops invalid UTF-8, so a message
+// taken from an untrusted body is always valid text. Cutting on a byte
+// boundary can split a multibyte rune; the partial sequence is dropped.
 func clamp(s string) string {
-	if len(s) <= maxMessage {
-		return s
+	if len(s) > maxMessage {
+		s = s[:maxMessage]
 	}
-	return strings.ToValidUTF8(s[:maxMessage], "")
+	return strings.ToValidUTF8(s, "")
 }
 
 // retryAfter works out how long to wait before retrying, preferring the

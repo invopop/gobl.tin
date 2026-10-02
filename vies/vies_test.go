@@ -210,6 +210,14 @@ func TestVerifyTransport(t *testing.T) {
 		assert.Contains(t, err.Error(), "MS_UNAVAILABLE: member state down")
 	})
 
+	t.Run("a failure list beats a valid field", func(t *testing.T) {
+		a := serve(t, http.StatusOK, `{"valid": false, "actionSucceed": false, "errorWrappers": [{"error": "MS_UNAVAILABLE"}]}`, nil)
+		res, err := a.Verify(context.Background(), tin.Request{Identifier: tid})
+		require.Error(t, err)
+		assert.Nil(t, res, "an outage is never reported as an invalid number")
+		assert.ErrorIs(t, err, tin.ErrServer)
+	})
+
 	t.Run("invalid input in a 200 body is an input error", func(t *testing.T) {
 		a := serve(t, http.StatusOK, `{"actionSucceed": false, "errorWrappers": [{"error": "INVALID_INPUT"}]}`, nil)
 		_, err := a.Verify(context.Background(), tin.Request{Identifier: tid})
@@ -499,6 +507,7 @@ func TestErrorMessagesAreClamped(t *testing.T) {
 		assert.LessOrEqual(t, len(msg), maxMessage)
 		assert.True(t, utf8.ValidString(msg))
 	}
+	assert.Equal(t, "bad  body", clamp("bad \xff body"), "a short message is sanitized too")
 	err := failureError("200", viesFailure{Error: "MS_UNAVAILABLE", Message: long})
 	assert.LessOrEqual(t, len(err.Error()), maxMessage+len("server: 200: "))
 	assert.Contains(t, err.Error(), "MS_UNAVAILABLE")
