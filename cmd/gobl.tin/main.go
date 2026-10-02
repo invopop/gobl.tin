@@ -38,10 +38,3 @@ func run() error {
 
 	return root().cmd().ExecuteContext(ctx)
 }
-
-func inputFilename(args []string) string {
-	if len(args) > 0 && args[0] != "-" {
-		return args[0]
-	}
-	return ""
-}
