@@ -1,0 +1,15 @@
+{
+	"$schema": "https://gobl.org/draft-0/org/party",
+	"name": "Acme Trading",
+	"tax_id": {
+		"country": "DE",
+		"code": "282741168"
+	},
+	"identities": [
+		{
+			"country": "DE",
+			"type": "HRB",
+			"code": "12345"
+		}
+	]
+}
