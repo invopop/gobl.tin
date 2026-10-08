@@ -3,7 +3,10 @@
 // register holds so that a party can be corrected with a patch.
 //
 // ABOUT: A Client holds an ordered list of verifiers. For the tax identity of
-// a party, the first verifier that supports it answers. The Client is safe
+// a party, the first verifier that supports it answers. When that verifier
+// cannot answer, the next verifier that supports the identity is a
+// fallback: it can confirm the identity, but it cannot reject it, because a
+// second register may simply not hold a valid identity. The Client is safe
 // for concurrent use when its verifiers are; it holds no state of its own
 // between calls.
 //
@@ -33,7 +36,8 @@ type Client struct {
 }
 
 // New creates a Client over the verifiers, in routing order: the first
-// verifier that supports an identifier answers for it. A Client with no
+// verifier that supports an identifier answers for it, and the next ones
+// that support it are fallbacks when it cannot answer. A Client with no
 // verifiers marks every identifier unsupported. Nil entries are skipped,
 // including a typed nil such as a nil *vies.Verifier. Two verifiers may
 // share a Source; order still decides which one answers.
@@ -103,25 +107,37 @@ func (c *Client) SupportsTaxID(tid *tax.Identity) bool {
 	return c.verifierFor(fromTaxID(tid).Identifier) != nil
 }
 
-// check runs the first verifier that supports the identifier and builds the
-// Check from its answer. The party is nil for a single identifier.
+// check asks the first verifier that supports the identifier and builds
+// the Check from its answer. When that verifier cannot answer, the next
+// verifiers that support the identifier are asked in order, and the first
+// valid answer wins. A fallback's invalid answer is not used: the Check stays
+// unverified with the first verifier's failure. The party is nil for a
+// single identifier.
 func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Check {
 	check := &Check{Path: id.Path, TaxID: id.taxID}
-	v := c.verifierFor(id.Identifier)
-	if v == nil {
+	req := Request{Identifier: id.Identifier, Party: party}
+	verifiers := c.verifiersFor(id.Identifier)
+	if len(verifiers) == 0 {
 		check.Status = StatusUnsupported
 		return check
 	}
-	check.Source = v.Source()
-	ans, err := v.Verify(ctx, Request{Identifier: id.Identifier, Party: party})
-	switch {
-	case err != nil:
-		check.fail(err)
-	case ans == nil:
-		check.fail(ErrServer.WithMessage("verifier returned no answer"))
-	case ans.Status != StatusValid && ans.Status != StatusInvalid:
-		check.fail(ErrServer.WithMsgf("verifier returned status %q", ans.Status))
-	default:
+	for i, v := range verifiers {
+		if i > 0 && ctx.Err() != nil {
+			break
+		}
+		ans, err := ask(ctx, v, req)
+		if err != nil {
+			if i == 0 {
+				check.Source = v.Source()
+				check.fail(err)
+			}
+			continue
+		}
+		if i > 0 && ans.Status != StatusValid {
+			continue
+		}
+		check.Source = v.Source()
+		check.fail(nil)
 		check.Status = ans.Status
 		check.Record = ans.Record
 		check.CheckedAt = ans.CheckedAt
@@ -131,8 +147,37 @@ func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Ch
 		if ans.TaxID != nil {
 			check.TaxID = normalizeTaxID(ans.TaxID)
 		}
+		return check
 	}
 	return check
+}
+
+// ask runs one verifier and returns its answer when it is valid or invalid.
+// Any other answer is a server error.
+func ask(ctx context.Context, v Verifier, req Request) (*Answer, error) {
+	ans, err := v.Verify(ctx, req)
+	switch {
+	case err != nil:
+		return nil, err
+	case ans == nil:
+		return nil, ErrServer.WithMessage("verifier returned no answer")
+	case ans.Status != StatusValid && ans.Status != StatusInvalid:
+		return nil, ErrServer.WithMsgf("verifier returned status %q", ans.Status)
+	default:
+		return ans, nil
+	}
+}
+
+// verifiersFor returns the verifiers that support the identifier, in
+// routing order.
+func (c *Client) verifiersFor(id Identifier) []Verifier {
+	var out []Verifier
+	for _, v := range c.verifiers {
+		if v.Supports(id) {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // verifierFor returns the first verifier that supports the identifier, or

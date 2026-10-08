@@ -20,7 +20,7 @@ Copyright [Invopop Ltd.](https://invopop.com) 2026. Released publicly under the 
 
 ### Verify a party
 
-`tin.New` takes an ordered list of verifiers. For the `tax_id` of a party, the first verifier that supports it answers. `Client.Verify` returns an error only for a nil party. Everything the registers say, including a register that cannot answer, is in the report.
+`tin.New` takes an ordered list of verifiers. For the `tax_id` of a party, the first verifier that supports it answers, and the next ones are fallbacks (see [Fallback](#fallback)). `Client.Verify` returns an error only for a nil party. Everything the registers say, including a register that cannot answer, is in the report.
 
 ```go
 package main
@@ -58,6 +58,21 @@ func main() {
 ```
 
 A client with no verifiers, `tin.New()`, is valid and marks every identifier `unsupported`. Nil verifiers are skipped. Two verifiers may share a `Source`; argument order still decides which one answers.
+
+### Fallback
+
+When the first verifier that supports an identifier cannot answer, the client asks the next verifier that supports it. A verifier cannot answer when it returns an error, no answer, or a status other than `valid` or `invalid`.
+
+A fallback can confirm an identifier, but it cannot reject it. A second register may not hold an identifier that is valid in the first one. For example, VIES holds only the Spanish NIFs registered for intra-EU trade, so a NIF that the AEAT census holds can be invalid in VIES. So:
+
+- A fallback's `valid` answer becomes the check. `Source` names the fallback, and the check has its record.
+- A fallback's `invalid` answer, or its failure, is not used. The next fallback is asked. When none confirms, the check is `unverified` with the failure of the first verifier, and `Source` names the first verifier.
+- An answer from the first verifier, `valid` or `invalid`, is final. No fallback is asked.
+- When the context has ended, no fallback is asked.
+
+```go
+c := tin.New(aeat.New(cert), vies.New()) // AEAT for Spain; VIES confirms Spanish NIFs when AEAT is down
+```
 
 The client holds no cache, so every call reaches the register. Caching is the consuming application's decision. The client is safe for concurrent use when its verifiers are. VIES requests time out after 15 seconds by default.
 
