@@ -9,7 +9,6 @@ import (
 
 	"github.com/invopop/gobl"
 	tin "github.com/invopop/gobl.tin"
-	"github.com/invopop/gobl.tin/vies"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/org"
 	"github.com/spf13/cobra"
@@ -37,9 +36,13 @@ type verifyOpts struct {
 	party string
 	json  bool
 
+	// registers wire the production verifiers, in routing order, each
+	// with its own flags.
+	registers []register
+
 	// verifiers is the ordered set the command verifies with. Nil means the
-	// production set, VIES; tests inject fakes so that no command dials the
-	// register.
+	// set that the registers build; tests inject fakes so that no command
+	// dials the register.
 	verifiers []tin.Verifier
 }
 
@@ -50,7 +53,7 @@ type labelled struct {
 }
 
 func verify(o *rootOpts) *verifyOpts {
-	return &verifyOpts{rootOpts: o}
+	return &verifyOpts{rootOpts: o, registers: defaultRegisters()}
 }
 
 func (c *verifyOpts) cmd() *cobra.Command {
@@ -63,6 +66,9 @@ func (c *verifyOpts) cmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&c.party, "party", partyCustomer, "Invoice party to verify: customer, supplier or both")
 	cmd.Flags().BoolVar(&c.json, "json", false, "Print the report as JSON")
+	for _, r := range c.registers {
+		r.flags(cmd.Flags())
+	}
 
 	return cmd
 }
@@ -83,7 +89,10 @@ func (c *verifyOpts) runE(cmd *cobra.Command, args []string) error {
 
 	verifiers := c.verifiers
 	if verifiers == nil {
-		verifiers = []tin.Verifier{vies.New()}
+		verifiers, err = buildVerifiers(c.registers)
+		if err != nil {
+			return err
+		}
 	}
 	client := tin.New(verifiers...)
 

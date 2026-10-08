@@ -253,6 +253,19 @@ func TestVerify(t *testing.T) {
 		assert.Equal(t, "ACME TRADING GMBH", report.Checks[0].Mismatches[0].Register)
 	})
 
+	t.Run("a name the register confirmed is not a mismatch", func(t *testing.T) {
+		rec := &Record{Name: "ESPAÑOL ESPAÑOL JUAN", NameConfirmed: true}
+		fake := &fakeVerifier{source: "aeat", checks: map[cbc.Code]*Answer{"282741168": valid("aeat", rec)}}
+		party := &org.Party{Name: "Juan Español Español", TaxID: &tax.Identity{Country: "DE", Code: "282741168"}}
+		report, err := New(fake).Verify(ctx, party)
+		require.NoError(t, err)
+		assert.Empty(t, report.Checks[0].Mismatches)
+
+		patch, err := Patch(party, report)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"ESPAÑOL ESPAÑOL JUAN"}`, string(patch), "the patch still writes the register's name")
+	})
+
 	t.Run("empty party name is not a mismatch", func(t *testing.T) {
 		fake := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"282741168": valid("vies", &Record{Name: "ACME GMBH"})}}
 		report, err := New(fake).Verify(ctx, &org.Party{TaxID: &tax.Identity{Country: "DE", Code: "282741168"}})

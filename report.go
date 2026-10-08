@@ -130,6 +130,12 @@ type Record struct {
 	// Name is the name the register holds for the party.
 	Name string `json:"name,omitempty"`
 
+	// NameConfirmed reports that the register compared the party's name
+	// with the one it holds and accepted it. The client then reports no name
+	// mismatch, although Name may be written differently, for example with
+	// the surnames first. Patch still writes Name.
+	NameConfirmed bool `json:"name_confirmed,omitempty"`
+
 	// Address is the address the register holds, only when the register
 	// gives it in structured form. An address given as one free text, as
 	// VIES does, is never parsed into it.
