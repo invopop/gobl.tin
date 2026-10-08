@@ -387,3 +387,103 @@ func TestSupports(t *testing.T) {
 
 	assert.False(t, New().SupportsTaxID(&tax.Identity{Country: "ES", Code: "B85905495"}))
 }
+
+func TestFallback(t *testing.T) {
+	ctx := context.Background()
+	es := &tax.Identity{Country: "ES", Code: "B85905495"}
+	down := ErrNetwork.WithMessage("register down")
+
+	t.Run("a primary answer is final", func(t *testing.T) {
+		for _, status := range []Status{StatusValid, StatusInvalid} {
+			primary := &fakeVerifier{source: "aeat", checks: map[cbc.Code]*Answer{"B85905495": {Status: status}}}
+			fallback := &fakeVerifier{source: "vies"}
+			check, err := New(primary, fallback).VerifyTaxID(ctx, es)
+			require.NoError(t, err)
+			assert.Equal(t, status, check.Status)
+			assert.Equal(t, cbc.Key("aeat"), check.Source)
+			assert.Empty(t, fallback.calls, "status %s", status)
+		}
+	})
+
+	t.Run("a fallback confirms when the primary cannot answer", func(t *testing.T) {
+		primary := &fakeVerifier{source: "aeat", errs: map[cbc.Code]error{"B85905495": down}}
+		fallback := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"B85905495": valid("vies", &Record{Name: "INVOPOP SL"})}}
+		check, err := New(primary, fallback).VerifyTaxID(ctx, es)
+		require.NoError(t, err)
+		assert.Equal(t, StatusValid, check.Status)
+		assert.Equal(t, cbc.Key("vies"), check.Source)
+		assert.Equal(t, &Record{Name: "INVOPOP SL"}, check.Record)
+		assert.NoError(t, check.Err())
+		assert.Empty(t, check.Failure)
+		assert.False(t, check.CheckedAt.IsZero())
+	})
+
+	t.Run("a fallback cannot reject", func(t *testing.T) {
+		primary := &fakeVerifier{source: "aeat", errs: map[cbc.Code]error{"B85905495": down}}
+		fallback := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"B85905495": {Status: StatusInvalid}}}
+		check, err := New(primary, fallback).VerifyTaxID(ctx, es)
+		require.NoError(t, err)
+		assert.Equal(t, StatusUnverified, check.Status)
+		assert.Equal(t, cbc.Key("aeat"), check.Source, "the failure is the primary's")
+		assert.ErrorIs(t, check.Err(), ErrNetwork)
+		assert.Contains(t, check.Failure, "register down")
+		assert.Nil(t, check.Record)
+		assert.Len(t, fallback.calls, 1)
+	})
+
+	t.Run("a failed fallback keeps the primary's failure", func(t *testing.T) {
+		primary := &fakeVerifier{source: "aeat", errs: map[cbc.Code]error{"B85905495": down}}
+		fallback := &fakeVerifier{source: "vies", errs: map[cbc.Code]error{"B85905495": &RateLimitedError{}}}
+		check, err := New(primary, fallback).VerifyTaxID(ctx, es)
+		require.NoError(t, err)
+		assert.Equal(t, StatusUnverified, check.Status)
+		assert.ErrorIs(t, check.Err(), ErrNetwork)
+	})
+
+	t.Run("a primary answer with an unknown status falls back", func(t *testing.T) {
+		primary := &fakeVerifier{source: "aeat", checks: map[cbc.Code]*Answer{"B85905495": {Status: "maybe"}}}
+		fallback := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"B85905495": valid("vies", nil)}}
+		check, err := New(primary, fallback).VerifyTaxID(ctx, es)
+		require.NoError(t, err)
+		assert.Equal(t, StatusValid, check.Status)
+		assert.Equal(t, cbc.Key("vies"), check.Source)
+	})
+
+	t.Run("fallbacks are asked in order until one confirms", func(t *testing.T) {
+		primary := &fakeVerifier{source: "aeat", errs: map[cbc.Code]error{"B85905495": down}}
+		second := &fakeVerifier{source: "second", checks: map[cbc.Code]*Answer{"B85905495": {Status: StatusInvalid}}}
+		third := &fakeVerifier{source: "third", checks: map[cbc.Code]*Answer{"B85905495": valid("third", nil)}}
+		skipped := &fakeVerifier{source: "other", supports: taxOnly("PT")}
+		check, err := New(primary, skipped, second, third).VerifyTaxID(ctx, es)
+		require.NoError(t, err)
+		assert.Equal(t, StatusValid, check.Status)
+		assert.Equal(t, cbc.Key("third"), check.Source)
+		assert.Empty(t, skipped.calls, "a verifier that does not support the identifier is no fallback")
+	})
+
+	t.Run("an ended context asks no fallback", func(t *testing.T) {
+		cctx, cancel := context.WithCancel(ctx)
+		cancel()
+		primary := &fakeVerifier{source: "aeat", errs: map[cbc.Code]error{"B85905495": down}}
+		fallback := &fakeVerifier{source: "vies"}
+		check, err := New(primary, fallback).VerifyTaxID(cctx, es)
+		require.NoError(t, err)
+		assert.Equal(t, StatusUnverified, check.Status)
+		assert.Empty(t, fallback.calls)
+	})
+
+	t.Run("a party falls back and keeps its mismatches", func(t *testing.T) {
+		primary := &fakeVerifier{source: "aeat", errs: map[cbc.Code]error{"B85905495": down}}
+		fallback := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"B85905495": valid("vies", &Record{Name: "INVOPOP SL"})}}
+		party := &org.Party{Name: "Acme", TaxID: es}
+		report, err := New(primary, fallback).Verify(ctx, party)
+		require.NoError(t, err)
+		require.Len(t, report.Checks, 1)
+		c := report.Checks[0]
+		assert.Equal(t, StatusValid, c.Status)
+		require.Len(t, c.Mismatches, 1)
+		assert.Equal(t, "INVOPOP SL", c.Mismatches[0].Register)
+		require.Len(t, fallback.calls, 1)
+		assert.Same(t, party, fallback.calls[0].Party)
+	})
+}
