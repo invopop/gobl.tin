@@ -191,6 +191,26 @@ func TestVerifier(t *testing.T) {
 		assert.Equal(t, tin.StatusValid, ans.Status)
 	})
 
+	t.Run("an identified natural person confirms the name", func(t *testing.T) {
+		v, _ := serve(t, http.StatusOK, response("99999999R", "ESPAÑOL ESPAÑOL JUAN", "IDENTIFICADO"))
+		ans, err := v.Verify(context.Background(), tin.Request{Identifier: person, Party: &org.Party{Name: "Juan Español Español"}})
+		require.NoError(t, err)
+		assert.Equal(t, &tin.Record{Name: "ESPAÑOL ESPAÑOL JUAN", NameConfirmed: true}, ans.Record)
+	})
+
+	t.Run("an identified natural person gives no name mismatch and a name patch", func(t *testing.T) {
+		v, _ := serve(t, http.StatusOK, response("99999999R", "ESPAÑOL ESPAÑOL JUAN", "IDENTIFICADO"))
+		party := &org.Party{Name: "Juan Español Español", TaxID: &tax.Identity{Country: "ES", Code: "99999999R"}}
+		report, err := tin.New(v).Verify(context.Background(), party)
+		require.NoError(t, err)
+		require.Len(t, report.Checks, 1)
+		assert.Equal(t, tin.StatusValid, report.Checks[0].Status)
+		assert.Empty(t, report.Checks[0].Mismatches)
+		patch, err := tin.Patch(party, report)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"ESPAÑOL ESPAÑOL JUAN"}`, string(patch))
+	})
+
 	t.Run("a natural person without a name is an input error", func(t *testing.T) {
 		v, got := serve(t, http.StatusOK, response("99999999R", "", "No identificado"))
 		for name, party := range map[string]*org.Party{"no party": nil, "empty name": {Name: "  "}} {

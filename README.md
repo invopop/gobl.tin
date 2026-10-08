@@ -150,7 +150,7 @@ AEAT gives one result per NIF. The `aeat` verifier maps it as follows:
 
 | AEAT result | Check status | Record |
 |---|---|---|
-| `Identificado` | `valid` | The registered name. For a natural person, AEAT gives the name only when the name sent is equal or very similar. |
+| `Identificado` | `valid` | The registered name. For a natural person, AEAT gives the name only when the name sent is equal or very similar, and the record has `name_confirmed`. AEAT writes the surnames first, so a name such as "Juan Español Español" gives no mismatch, and the patch writes "ESPAÑOL ESPAÑOL JUAN". |
 | `Identificado-Baja` | `valid` | The registered name, with status `inactive`. |
 | `Identificado-Revocado` | `valid` | The registered name, with status `dissolved`. AEAT revoked the NIF. |
 | `No identificado -similar` | `invalid` | The registered name of the natural person, so the name mismatch shows it. An invalid check is never patched. |

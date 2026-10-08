@@ -245,6 +245,10 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	switch normalizeResult(out.Result) {
 	case resultIdentified:
 		ans.Status = tin.StatusValid
+		// AEAT compares the name of a natural person and accepts small
+		// differences, so its answer confirms the name sent. It writes the
+		// name its own way, with the surnames first.
+		rec.NameConfirmed = naturalPerson(id.Code)
 	case resultIdentifiedDeregistered:
 		ans.Status = tin.StatusValid
 		rec.Status = tin.RecordStatusInactive
