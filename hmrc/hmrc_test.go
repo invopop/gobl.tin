@@ -115,7 +115,7 @@ func TestNew(t *testing.T) {
 			srv, f := serve(t, reply{status: http.StatusOK, body: found})
 			v := New(c[0], c[1], WithBaseURL(srv.baseURL))
 			_, err := v.Verify(context.Background(), tin.Request{Identifier: vrn})
-			assert.ErrorIs(t, err, tin.ErrInput)
+			assert.ErrorIs(t, err, tin.ErrServer)
 			assert.Contains(t, err.Error(), "no client credentials")
 			assert.Zero(t, f.tokens)
 		}

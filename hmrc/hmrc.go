@@ -136,7 +136,9 @@ func New(clientID, clientSecret string, opts ...Option) *Verifier {
 		opt(v)
 	}
 	if clientID == "" || clientSecret == "" {
-		v.initErr = tin.ErrInput.WithMessage("no client credentials provided")
+		// Missing credentials are a problem with the configuration, not with
+		// the identifier, so they are the register failing to answer.
+		v.initErr = tin.ErrServer.WithMessage("no client credentials provided")
 	}
 	if u, err := url.Parse(v.baseURL); err != nil {
 		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)
