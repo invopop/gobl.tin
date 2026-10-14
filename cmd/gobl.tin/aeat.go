@@ -8,7 +8,6 @@ import (
 	tin "github.com/invopop/gobl.tin"
 	"github.com/invopop/gobl.tin/aeat"
 	"github.com/spf13/pflag"
-	"software.sslmate.com/src/go-pkcs12"
 )
 
 // envAEATPassword names the environment variable with the password of the
@@ -49,13 +48,9 @@ func loadCertificate(path, password string) (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("reading AEAT certificate: %w", err)
 	}
-	key, leaf, chain, err := pkcs12.DecodeChain(data, password)
+	cert, err := aeat.LoadCertificate(data, password)
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("decoding AEAT certificate: %w", err)
-	}
-	cert := tls.Certificate{Certificate: [][]byte{leaf.Raw}, PrivateKey: key, Leaf: leaf}
-	for _, ca := range chain {
-		cert.Certificate = append(cert.Certificate, ca.Raw)
 	}
 	return cert, nil
 }

@@ -89,11 +89,17 @@ c := tin.New(vies.New(
 The `aeat` verifier asks the census of AEAT, the Spanish tax agency, through its VNifV2 identification service. AEAT requires mutual TLS, so `aeat.New` takes the client certificate. Use a certificate that the AEAT electronic office accepts: a personal, representative or seal certificate. Put it before VIES, so that it answers for Spanish tax IDs:
 
 ```go
+cert, err := aeat.LoadCertificate(data, password) // data is the PKCS#12 file
+if err != nil {
+	return err
+}
 c := tin.New(
-	aeat.New(cert, aeat.WithSeal()), // cert is a tls.Certificate
+	aeat.New(cert, aeat.WithSeal()),
 	vies.New(),
 )
 ```
+
+`aeat.LoadCertificate` decodes the PKCS#12 file that the AEAT electronic office issues, with its chain. `aeat.New` also takes any other `tls.Certificate`.
 
 - `aeat.WithSeal()` sends requests to `www10.agenciatributaria.gob.es`, which AEAT requires for a seal certificate. Without it, requests go to `www1`.
 - `aeat.WithTimeout(d)` and `aeat.WithBaseURL(url)` work as they do for VIES. The default timeout is 15 seconds.
