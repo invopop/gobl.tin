@@ -198,6 +198,18 @@ func TestVerifier(t *testing.T) {
 		assert.Equal(t, &tin.Record{Name: "ESPAÑOL ESPAÑOL JUAN", NameConfirmed: true}, ans.Record)
 	})
 
+	t.Run("a natural person in state baja or revoked confirms the name", func(t *testing.T) {
+		for result, status := range map[string]tin.RecordStatus{
+			"Identificado-Baja":     tin.RecordStatusInactive,
+			"Identificado-Revocado": tin.RecordStatusRevoked,
+		} {
+			v, _ := serve(t, http.StatusOK, response("99999999R", "ESPAÑOL ESPAÑOL JUAN", result))
+			ans, err := v.Verify(context.Background(), tin.Request{Identifier: person, Party: &org.Party{Name: "Juan Español Español"}})
+			require.NoError(t, err, result)
+			assert.Equal(t, &tin.Record{Name: "ESPAÑOL ESPAÑOL JUAN", Status: status, NameConfirmed: true}, ans.Record, result)
+		}
+	})
+
 	t.Run("an identified natural person gives no name mismatch and a name patch", func(t *testing.T) {
 		v, _ := serve(t, http.StatusOK, response("99999999R", "ESPAÑOL ESPAÑOL JUAN", "IDENTIFICADO"))
 		party := &org.Party{Name: "Juan Español Español", TaxID: &tax.Identity{Country: "ES", Code: "99999999R"}}

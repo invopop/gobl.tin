@@ -255,19 +255,20 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 		CheckedAt: time.Now().UTC(),
 	}
 	rec := &tin.Record{Name: strings.TrimSpace(out.Name)}
-	switch normalizeResult(out.Result) {
-	case resultIdentified:
+	result := normalizeResult(out.Result)
+	switch result {
+	case resultIdentified, resultIdentifiedDeregistered, resultIdentifiedRevoked:
 		ans.Status = tin.StatusValid
 		// AEAT compares the name of a natural person and accepts small
-		// differences, so its answer confirms the name sent. It writes the
-		// name its own way, with the surnames first.
+		// differences, so an identified answer confirms the name sent. It
+		// writes the name its own way, with the surnames first.
 		rec.NameConfirmed = naturalPerson(id.Code)
-	case resultIdentifiedDeregistered:
-		ans.Status = tin.StatusValid
-		rec.Status = tin.RecordStatusInactive
-	case resultIdentifiedRevoked:
-		ans.Status = tin.StatusValid
-		rec.Status = tin.RecordStatusRevoked
+		switch result {
+		case resultIdentifiedDeregistered:
+			rec.Status = tin.RecordStatusInactive
+		case resultIdentifiedRevoked:
+			rec.Status = tin.RecordStatusRevoked
+		}
 	case resultNotIdentifiedSimilar:
 		// AEAT returns the name it holds, so the mismatch shows it.
 		ans.Status = tin.StatusInvalid
