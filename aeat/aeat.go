@@ -71,6 +71,12 @@ const (
 	resultNotIdentifiedSimilar = "NOIDENTIFICADO-SIMILAR"
 )
 
+// placeholderNIF is a NIF that AEAT identifies under the name "OPERACION NO
+// IDENTIFICADA EN CONSTITUCIÓN". It stands for an operation without an
+// identified party, so it never identifies a real party and is not
+// identified, without a request.
+const placeholderNIF cbc.Code = "B99999997"
+
 // Verifier is the AEAT verifier. It implements tin.Verifier.
 type Verifier struct {
 	baseURL string
@@ -228,6 +234,13 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	name := ""
 	if req.Party != nil {
 		name = strings.TrimSpace(req.Party.Name)
+	}
+	if id.Code == placeholderNIF {
+		return &tin.Answer{
+			Status:    tin.StatusInvalid,
+			TaxID:     &tax.Identity{Country: l10n.ES.Tax(), Code: id.Code},
+			CheckedAt: time.Now().UTC(),
+		}, nil
 	}
 	if name == "" && naturalPerson(id.Code) {
 		return nil, tin.ErrInput.WithMessage("AEAT needs the name of a natural person")

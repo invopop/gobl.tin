@@ -224,6 +224,16 @@ func TestVerifier(t *testing.T) {
 		assert.Empty(t, got.body, "no request is sent")
 	})
 
+	t.Run("the placeholder NIF is not identified, without a request", func(t *testing.T) {
+		v, got := serve(t, http.StatusOK, response("B99999997", "OPERACION NO IDENTIFICADA EN CONSTITUCIÓN", "Identificado"))
+		ans, err := v.Verify(context.Background(), tin.Request{Identifier: tin.Identifier{Country: "ES", Code: "B99999997"}})
+		require.NoError(t, err)
+		assert.Equal(t, tin.StatusInvalid, ans.Status)
+		assert.Equal(t, &tax.Identity{Country: "ES", Code: "B99999997"}, ans.TaxID)
+		assert.Nil(t, ans.Record)
+		assert.Empty(t, got.body, "no request is sent")
+	})
+
 	t.Run("an empty code is an input error", func(t *testing.T) {
 		v, _ := serve(t, http.StatusOK, response("", "", "Identificado"))
 		_, err := v.Verify(context.Background(), tin.Request{Identifier: tin.Identifier{Country: "ES"}})

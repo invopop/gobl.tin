@@ -158,6 +158,8 @@ AEAT gives one result per NIF. The `aeat` verifier maps it as follows:
 
 Any other result, such as `No procesado`, is `ErrServer`.
 
+AEAT identifies the NIF `B99999997` under the name "OPERACION NO IDENTIFICADA EN CONSTITUCIÓN". It stands for an operation without an identified party, not for a real party. The `aeat` verifier answers `invalid` for it, without a record and without a request, so that the placeholder name is never reported or patched.
+
 ## Patch
 
 `tin.Patch(party, report)` builds an [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON merge patch on the party, with what the register holds and the party does not. It is a best effort for each field the register gives in a form GOBL can take as is. A patch with nothing to write is `{}`. A nil party or report is `ErrInput`.
