@@ -97,3 +97,20 @@ func TestCheckJSON(t *testing.T) {
 		assert.JSONEq(t, `{"path":"/tax_id","status":"unverified","source":"vies","failure":"network: dial"}`, string(data))
 	})
 }
+
+func TestAnswerJSON(t *testing.T) {
+	when := time.Date(2026, 9, 24, 9, 12, 0, 0, time.UTC)
+	ans := &Answer{
+		Status:    StatusValid,
+		Record:    &Record{Name: "INVOPOP, SL"},
+		TaxID:     &tax.Identity{Country: "ES", Code: "B85905495"},
+		CheckedAt: when,
+	}
+	data, err := json.Marshal(ans)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"status":"valid","record":{"name":"INVOPOP, SL"},"tax_id":{"country":"ES","code":"B85905495"},"checked_at":"2026-09-24T09:12:00Z"}`, string(data))
+
+	var back Answer
+	require.NoError(t, json.Unmarshal(data, &back))
+	assert.Equal(t, ans, &back)
+}

@@ -44,20 +44,20 @@ type Request struct {
 }
 
 // Answer is what a register says about one identifier. The Client turns it
-// into a Check.
+// into a Check. Its JSON form is stable, so an application can store it.
 type Answer struct {
 	// Status is valid or invalid. Any other status, including empty, makes
 	// the check unverified.
-	Status Status
+	Status Status `json:"status"`
 
 	// Record is what the register holds for the identifier, when disclosed.
-	Record *Record
+	Record *Record `json:"record,omitempty"`
 
 	// TaxID is the tax identity as the register echoes it, when it does.
-	TaxID *tax.Identity
+	TaxID *tax.Identity `json:"tax_id,omitempty"`
 
 	// CheckedAt is when the register answered. Zero means now.
-	CheckedAt time.Time
+	CheckedAt time.Time `json:"checked_at,omitzero"`
 }
 
 // Status is the outcome of one check.
