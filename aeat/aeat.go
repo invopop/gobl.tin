@@ -221,6 +221,16 @@ func (v *Verifier) Supports(id tin.Identifier) bool {
 	return id.Country == l10n.ES.Tax()
 }
 
+// PartyKey returns the name of a natural person, in upper case with single
+// spaces, because AEAT compares it and its answer depends on it. It returns
+// "" for an entity, which AEAT identifies from the NIF alone.
+func (v *Verifier) PartyKey(req tin.Request) string {
+	if req.Party == nil || !naturalPerson(req.Identifier.Code) {
+		return ""
+	}
+	return strings.Join(strings.Fields(strings.ToUpper(req.Party.Name)), " ")
+}
+
 // Verify identifies the request's NIF in the AEAT census. AEAT needs the
 // name of a natural person, so the party's name is sent with the NIF. An
 // entity is identified from the NIF alone. A NIF that AEAT does not

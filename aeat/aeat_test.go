@@ -152,6 +152,22 @@ func TestNew(t *testing.T) {
 	})
 }
 
+func TestPartyKey(t *testing.T) {
+	var _ tin.PartyKeyer = (*Verifier)(nil)
+	v := New(testCert(t))
+	req := func(code, name string) tin.Request {
+		return tin.Request{
+			Identifier: tin.Identifier{Path: tin.PathTaxID, Country: "ES", Code: cbc.Code(code)},
+			Party:      &org.Party{Name: name},
+		}
+	}
+	assert.Equal(t, "JUAN ESPAÑOL ESPAÑOL", v.PartyKey(req("99999999R", "  juan  Español español ")), "a DNI keys on the folded name")
+	assert.Equal(t, "JUAN", v.PartyKey(req("X1234567L", "Juan")), "a NIE keys on the name")
+	assert.Equal(t, "JUAN", v.PartyKey(req("K1234567A", "Juan")), "a K code keys on the name")
+	assert.Empty(t, v.PartyKey(req("B85905495", "Invopop")), "an entity keys on the NIF only")
+	assert.Empty(t, v.PartyKey(tin.Request{Identifier: req("99999999R", "").Identifier}), "no party, no key")
+}
+
 func TestVerifier(t *testing.T) {
 	t.Run("source", func(t *testing.T) {
 		assert.Equal(t, Source, New(testCert(t)).Source())

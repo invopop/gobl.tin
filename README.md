@@ -123,6 +123,8 @@ type Verifier interface {
 
 `Identifier` describes the identifier: its path in the party, its country and its normalized code. `Supports` routes on it alone. `Request` is what `Verify` receives: the `Identifier` and the `Party` it belongs to, as read-only context for registers that need more than the code, such as a name. `Party` is nil for `VerifyTaxID`; a verifier that needs it returns `ErrInput`. Consumers never construct either; the client builds them from GOBL types.
 
+A verifier whose answer depends on party data, and not only on the identifier, also implements `tin.PartyKeyer`. `PartyKey(req)` returns that data, normalized, or `""` when the answer depends on the identifier only. An application that stores answers adds it to its key, so that two requests with one identifier and different party data never share an answer. AEAT returns the name of a natural person, in upper case with single spaces, and `""` for an entity.
+
 `Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. Any status other than `valid` or `invalid`, including empty, makes the check `unverified`.
 
 To use a new verifier in the command line, add a `register` in its own file under `cmd/gobl.tin`, as `aeat.go` does, and list it in `defaultRegisters` in routing order. A register adds its own flags and builds its verifier, so the `verify` command needs no change.

@@ -32,6 +32,16 @@ type Verifier interface {
 	Verify(ctx context.Context, req Request) (*Answer, error)
 }
 
+// PartyKeyer is implemented by a Verifier whose answer depends on party data
+// as well as on the identifier, for example a register that compares the
+// name. It lets a caller that stores answers tell two requests apart.
+type PartyKeyer interface {
+	// PartyKey returns the party data the answer depends on, normalized so
+	// that requests the register treats alike return the same key. It
+	// returns "" when the answer depends on the identifier only.
+	PartyKey(req Request) string
+}
+
 // Request is what a Verifier receives: the identifier to answer for and the
 // party it belongs to.
 type Request struct {
