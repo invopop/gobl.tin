@@ -141,11 +141,11 @@ func New(clientID, clientSecret string, opts ...Option) *Verifier {
 		v.initErr = tin.ErrServer.WithMessage("no client credentials provided")
 	}
 	if u, err := url.Parse(v.baseURL); err != nil {
-		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)
+		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)
 	} else if u.Scheme != "http" && u.Scheme != "https" {
-		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: scheme must be http or https", v.baseURL)
+		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: scheme must be http or https", v.baseURL)
 	} else if u.Hostname() == "" {
-		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: missing host", v.baseURL)
+		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: missing host", v.baseURL)
 	}
 	if v.http != nil {
 		// A copy, so that setting the timeout leaves the caller's client

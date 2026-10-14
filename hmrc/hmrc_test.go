@@ -124,7 +124,7 @@ func TestNew(t *testing.T) {
 	t.Run("an invalid base URL fails on the first call", func(t *testing.T) {
 		for _, u := range []string{"://bad", "ftp://example.com", "https://"} {
 			_, err := New("id", "secret", WithBaseURL(u)).Verify(context.Background(), tin.Request{Identifier: vrn})
-			assert.ErrorIs(t, err, tin.ErrInput, u)
+			assert.ErrorIs(t, err, tin.ErrServer, u)
 		}
 	})
 

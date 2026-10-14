@@ -11,7 +11,7 @@ c := tin.New(
 
 - `hmrc.WithSandbox()`: sends requests to `test-api.service.hmrc.gov.uk`, which needs a sandbox application and holds only [HMRC's mock VAT numbers](https://github.com/hmrc/vat-registered-companies-api/tree/main/public/api/conf/2.0/test-data). Without it, requests go to `api.service.hmrc.gov.uk`.
 - `hmrc.WithTimeout(d)` (default 15 seconds), `hmrc.WithBaseURL(url)` and `hmrc.WithHTTPClient(c)`.
-- Missing credentials are `ErrServer` on the first call; an invalid base URL is `ErrInput`.
+- Missing credentials or an invalid base URL are `ErrServer` on the first call.
 
 The verifier gets an OAuth token (`client_credentials`, scope `read:vat`), reuses it for its 4 hours, renews it one minute before it expires, and gets a new one once on a 401.
 
