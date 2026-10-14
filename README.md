@@ -29,7 +29,7 @@ Each register has its own package and README:
 
 ### Verify a party
 
-`tin.New` takes an ordered list of verifiers. For the `tax_id` of a party, the first verifier that supports it answers, and the next ones are fallbacks (see [Fallback](#fallback)). `Client.Verify` returns an error only for a nil party. Everything the registers say, including a register that cannot answer, is in the report.
+`tin.New` takes an ordered list of verifiers. For the `tax_id` of a party, the first verifier that supports it answers, and the next ones are fallbacks (see [Fallback](#fallback)). `Client.Verify` returns an error only for a nil party. The report has one check per identifier, with the answer that the client selects. When no verifier answers, the check is `unverified` and has the failure of the first verifier.
 
 ```go
 package main
