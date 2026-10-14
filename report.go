@@ -164,6 +164,11 @@ const (
 	// RecordStatusDissolved means the register holds the party as dissolved
 	// or struck off.
 	RecordStatusDissolved RecordStatus = "dissolved"
+
+	// RecordStatusRevoked means the authority that issued the identifier
+	// revoked it. The register still identifies the party, but the
+	// identifier has no legal effect.
+	RecordStatusRevoked RecordStatus = "revoked"
 )
 
 // MismatchField names the kind of party field a mismatch is about.

@@ -254,7 +254,7 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 		rec.Status = tin.RecordStatusInactive
 	case resultIdentifiedRevoked:
 		ans.Status = tin.StatusValid
-		rec.Status = tin.RecordStatusDissolved
+		rec.Status = tin.RecordStatusRevoked
 	case resultNotIdentifiedSimilar:
 		// AEAT returns the name it holds, so the mismatch shows it.
 		ans.Status = tin.StatusInvalid

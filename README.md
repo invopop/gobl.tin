@@ -144,7 +144,7 @@ Every path is a JSON Pointer relative to the party document. A consumer that pat
 
 ### Record status
 
-`Record.Status` is the standing of the party in its register: `active`, `inactive` or `dissolved`. Verifiers map register values onto this vocabulary and leave it empty for values they do not know. It does not change the check status: a recognised but dissolved company is `valid` with `Record.Status` `dissolved`, and the consumer decides. VIES has no standing and leaves it empty.
+`Record.Status` is the standing of the party in its register: `active`, `inactive`, `dissolved` or `revoked`. `revoked` means that the authority that issued the identifier revoked it: the register still identifies the party, but the identifier has no legal effect. Verifiers map register values onto this vocabulary and leave it empty for values they do not know. It does not change the check status: a recognised but dissolved company is `valid` with `Record.Status` `dissolved`, and the consumer decides. VIES has no standing and leaves it empty.
 
 AEAT gives one result per NIF. The `aeat` verifier maps it as follows:
 
@@ -152,7 +152,7 @@ AEAT gives one result per NIF. The `aeat` verifier maps it as follows:
 |---|---|---|
 | `Identificado` | `valid` | The registered name. For a natural person, AEAT gives the name only when the name sent is equal or very similar, and the record has `name_confirmed`. AEAT writes the surnames first, so a name such as "Juan Español Español" gives no mismatch, and the patch writes "ESPAÑOL ESPAÑOL JUAN". |
 | `Identificado-Baja` | `valid` | The registered name, with status `inactive`. |
-| `Identificado-Revocado` | `valid` | The registered name, with status `dissolved`. AEAT revoked the NIF. |
+| `Identificado-Revocado` | `valid` | The registered name, with status `revoked`. AEAT revoked the NIF, which then has no fiscal effect. |
 | `No identificado -similar` | `invalid` | The registered name of the natural person, so the name mismatch shows it. An invalid check is never patched. |
 | `No identificado` | `invalid` | None. AEAT echoes the name sent, which is not a record. |
 

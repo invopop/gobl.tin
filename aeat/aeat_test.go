@@ -239,7 +239,7 @@ func TestVerifier(t *testing.T) {
 		{"identified", "Identificado", tin.StatusValid, &tin.Record{Name: "INVOPOP SL"}},
 		{"identified in upper case", "IDENTIFICADO", tin.StatusValid, &tin.Record{Name: "INVOPOP SL"}},
 		{"identified in state baja", "Identificado-Baja", tin.StatusValid, &tin.Record{Name: "INVOPOP SL", Status: tin.RecordStatusInactive}},
-		{"identified with a revoked NIF", "Identificado-Revocado", tin.StatusValid, &tin.Record{Name: "INVOPOP SL", Status: tin.RecordStatusDissolved}},
+		{"identified with a revoked NIF", "Identificado-Revocado", tin.StatusValid, &tin.Record{Name: "INVOPOP SL", Status: tin.RecordStatusRevoked}},
 		{"not identified echoes the name, which is no record", "No identificado", tin.StatusInvalid, nil},
 		{"not identified by a similar name holds the registered name", "No identificado -similar", tin.StatusInvalid, &tin.Record{Name: "INVOPOP SL"}},
 	}
