@@ -99,11 +99,11 @@ func New(opts ...Option) *Verifier {
 		opt(a)
 	}
 	if u, err := url.Parse(a.baseURL); err != nil {
-		a.initErr = tin.ErrInput.WithMsgf("invalid base URL %q", a.baseURL).WithCause(err)
+		a.initErr = tin.ErrServer.WithMsgf("invalid base URL %q", a.baseURL).WithCause(err)
 	} else if u.Scheme != "http" && u.Scheme != "https" {
-		a.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: scheme must be http or https", a.baseURL)
+		a.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: scheme must be http or https", a.baseURL)
 	} else if u.Hostname() == "" {
-		a.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: missing host", a.baseURL)
+		a.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: missing host", a.baseURL)
 	}
 	if a.http != nil {
 		// A copy, so that setting the timeout leaves the caller's client

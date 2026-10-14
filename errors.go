@@ -29,12 +29,15 @@ var (
 	ErrNetwork = NewError("network")
 
 	// ErrServer is returned when the register answered with an unexpected
-	// status. The HTTP status is available via Code().
+	// status. The HTTP status is available via Code(). A verifier that is
+	// configured wrong is ErrServer without a code.
 	ErrServer = NewError("server")
 
 	// ErrInput is returned when the input is malformed or incomplete: a
 	// missing tax ID, an empty code, party data a register needs but the
 	// request lacks, or a request the register rejected as badly formed.
+	// Without a code, it comes from the verifier before any request, and its
+	// message says what the identifier or the party lacks.
 	ErrInput = NewError("input")
 )
 

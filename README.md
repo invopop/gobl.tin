@@ -103,7 +103,7 @@ c := tin.New(
 
 - `aeat.WithSeal()` sends requests to `www10.agenciatributaria.gob.es`, which AEAT requires for a seal certificate. Without it, requests go to `www1`.
 - `aeat.WithTimeout(d)` and `aeat.WithBaseURL(url)` work as they do for VIES. The default timeout is 15 seconds.
-- A missing certificate is `ErrServer` on the first call, because it is a problem with the configuration. An invalid base URL is `ErrInput` on the first call.
+- A missing certificate or an invalid base URL is `ErrServer` on the first call, because it is a problem with the configuration.
 
 AEAT has no test environment with real taxpayers, so checks always run against production, as they do for VIES.
 
@@ -186,9 +186,9 @@ Checks are read in report order, and the first valid record that has a value for
 
 An invalid identifier is a status, not an error. A register that cannot answer is a check with status `unverified` that carries the failure; `Verify` still returns a nil error. `Check.Err()` returns the Go error so that callers can match it:
 
-- `ErrInput`: the input is malformed or incomplete. A nil party, an identifier without a code, or a request the register rejected as badly formed (HTTP 400).
+- `ErrInput`: the input is malformed or incomplete. A nil party, an identifier without a code, or a request the register rejected as badly formed (HTTP 400). An `ErrInput` without a code comes from a verifier before any request, and its message says what the identifier or the party lacks, so an application can show it to its user.
 - `ErrNetwork`: the request failed below HTTP. A dial error, a timeout, or a response that could not be decoded. It says nothing about the identifier.
-- `ErrServer`: the register answered with an unexpected status, for example a 500. The HTTP status is available through the `Code()` accessor.
+- `ErrServer`: the register answered with an unexpected status, for example a 500. The HTTP status is available through the `Code()` accessor. A verifier that is configured wrong, for example with no credentials or an invalid base URL, is also `ErrServer`, without a code.
 - `RateLimitedError`: the register's request budget is exhausted (HTTP 429). It carries a `RetryAfter` duration so the caller can requeue with a precise delay, and a `Reason` when the register names the limit.
 
 VIES also reports failures in the body of an HTTP 200 response: with `actionSucceed` false and an error code in `errorWrappers`, or with `valid` false and the code in `userError`. The `vies` verifier maps them by meaning: `MS_MAX_CONCURRENT_REQ` and the other concurrency codes are a `RateLimitedError` with a one-minute `RetryAfter` and the code as `Reason`; `INVALID_INPUT` is `ErrInput`; every other code, such as `MS_UNAVAILABLE`, is `ErrServer`. The VIES code is part of the error message.

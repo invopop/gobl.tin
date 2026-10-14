@@ -138,11 +138,11 @@ func New(cert tls.Certificate, opts ...Option) *Verifier {
 		v.initErr = tin.ErrServer.WithMessage("no client certificate provided")
 	}
 	if u, err := url.Parse(v.baseURL); err != nil {
-		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)
+		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)
 	} else if u.Scheme != "http" && u.Scheme != "https" {
-		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: scheme must be http or https", v.baseURL)
+		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: scheme must be http or https", v.baseURL)
 	} else if u.Hostname() == "" {
-		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q: missing host", v.baseURL)
+		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: missing host", v.baseURL)
 	}
 	v.conn = resty.NewWithClient(&http.Client{Transport: transport(cert)}).
 		SetBaseURL(v.baseURL).
@@ -305,7 +305,7 @@ func (v *Verifier) identify(ctx context.Context, code cbc.Code, name string) (*t
 	env.Body.Taxpayer = taxpayerRequest{NIF: code.String(), Name: name}
 	body, err := xml.Marshal(env)
 	if err != nil {
-		return nil, "", tin.ErrInput.WithMessage("encoding request").WithCause(err)
+		return nil, "", tin.ErrServer.WithMessage("encoding request").WithCause(err)
 	}
 
 	resp, err := v.conn.R().
