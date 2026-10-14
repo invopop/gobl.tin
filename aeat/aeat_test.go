@@ -216,6 +216,10 @@ func TestVerifier(t *testing.T) {
 		for name, party := range map[string]*org.Party{"no party": nil, "empty name": {Name: "  "}} {
 			_, err := v.Verify(context.Background(), tin.Request{Identifier: person, Party: party})
 			assert.ErrorIs(t, err, tin.ErrInput, name)
+			var e *tin.Error
+			require.True(t, errors.As(err, &e))
+			assert.Equal(t, "AEAT needs the name of a natural person to check a DNI or NIE", e.Message())
+			assert.Empty(t, e.Code(), "no request, so no status")
 		}
 		for _, code := range []cbc.Code{"X1234567L", "K1234567A"} {
 			_, err := v.Verify(context.Background(), tin.Request{Identifier: tin.Identifier{Country: "ES", Code: code}})

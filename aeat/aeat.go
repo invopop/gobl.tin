@@ -243,7 +243,7 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 		}, nil
 	}
 	if name == "" && naturalPerson(id.Code) {
-		return nil, tin.ErrInput.WithMessage("AEAT needs the name of a natural person")
+		return nil, tin.ErrInput.WithMessage("AEAT needs the name of a natural person to check a DNI or NIE")
 	}
 
 	out, status, err := v.identify(ctx, id.Code, name)
