@@ -133,7 +133,9 @@ func New(cert tls.Certificate, opts ...Option) *Verifier {
 		}
 	}
 	if len(cert.Certificate) == 0 || cert.PrivateKey == nil {
-		v.initErr = tin.ErrInput.WithMessage("no client certificate provided")
+		// A missing certificate is a problem with the configuration, not
+		// with the identifier, so it is the register failing to answer.
+		v.initErr = tin.ErrServer.WithMessage("no client certificate provided")
 	}
 	if u, err := url.Parse(v.baseURL); err != nil {
 		v.initErr = tin.ErrInput.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)

@@ -97,7 +97,7 @@ c := tin.New(
 
 - `aeat.WithSeal()` sends requests to `www10.agenciatributaria.gob.es`, which AEAT requires for a seal certificate. Without it, requests go to `www1`.
 - `aeat.WithTimeout(d)` and `aeat.WithBaseURL(url)` work as they do for VIES. The default timeout is 15 seconds.
-- A missing certificate or an invalid base URL is `ErrInput` on the first call.
+- A missing certificate is `ErrServer` on the first call, because it is a problem with the configuration. An invalid base URL is `ErrInput` on the first call.
 
 AEAT has no test environment with real taxpayers, so checks always run against production, as they do for VIES.
 

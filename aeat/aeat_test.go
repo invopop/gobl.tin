@@ -136,7 +136,7 @@ func TestNew(t *testing.T) {
 	t.Run("a missing certificate fails on the first call", func(t *testing.T) {
 		v := New(tls.Certificate{})
 		_, err := v.Verify(context.Background(), tin.Request{Identifier: entity})
-		assert.ErrorIs(t, err, tin.ErrInput)
+		assert.ErrorIs(t, err, tin.ErrServer)
 		assert.Contains(t, err.Error(), "no client certificate")
 	})
 
