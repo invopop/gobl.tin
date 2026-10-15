@@ -13,9 +13,19 @@ c := tin.New(vies.New(
 ## Record
 
 - **Name:** given by most member states. Some mask it with `---`, which gives no record.
-- **Address:** VIES gives it as one free text, so the record has no address.
+- **Address:** see [Addresses](#addresses).
 - **Status:** VIES has none.
 - **Tax ID:** the identity that VIES echoes.
+
+## Addresses
+
+VIES gives the address as one free text, written differently by each member state. The verifier has one parser per member state, in `address_<country>.go`, and structures the address only when the whole text has the shape that the parser knows. Any other text gives no address. The register's own form is kept, in upper case.
+
+| Member state | Shape | Address |
+|---|---|---|
+| `IT` | Two lines: the street with its house number, then the postcode, the locality and the province code. `VIA DEL BOSCO DEGLI ARVALI 84 INT 7` / `00148 ROMA RM` | `street` "VIA DEL BOSCO DEGLI ARVALI", `num` "84", `street_extra` "INT 7", `code` "00148", `locality` "ROMA", `region` "RM" |
+
+A member state without a parser gives no address. To add one, collect real VIES answers for it first, then add its parser and a table of those answers as tests.
 
 ## Errors
 
