@@ -5,25 +5,19 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// register wires one verifier into the command: the flags it needs and how
-// to build it from them. Each register keeps its specifics in its own file,
-// so that the verify command knows none of them.
+// Wires one verifier into the command.
 type register interface {
-	// flags adds the register's flags to the command.
 	flags(fs *pflag.FlagSet)
 
-	// verifier builds the verifier from the flags. It returns nil when
-	// the register is not configured, so that the command skips it.
+	// Nil when the register is not configured.
 	verifier() (tin.Verifier, error)
 }
 
-// defaultRegisters lists the registers in routing order: a national register
-// comes before VIES, so that it answers for its own country.
+// Registers in routing order: national registers before VIES.
 func defaultRegisters() []register {
 	return []register{new(aeatRegister), new(viesRegister)}
 }
 
-// buildVerifiers builds the verifiers of the configured registers, in order.
 func buildVerifiers(registers []register) ([]tin.Verifier, error) {
 	var out []tin.Verifier
 	for _, r := range registers {

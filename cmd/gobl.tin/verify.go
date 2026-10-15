@@ -36,13 +36,11 @@ type verifyOpts struct {
 	party string
 	json  bool
 
-	// registers wire the production verifiers, in routing order, each
-	// with its own flags.
+	// Production verifiers, in routing order.
 	registers []register
 
-	// verifiers is the ordered set the command verifies with. Nil means the
-	// set that the registers build; tests inject fakes so that no command
-	// dials the register.
+	// Ordered set the command verifies with. Nil means the registers'; tests
+	// inject fakes.
 	verifiers []tin.Verifier
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// viesRegister wires VIES. It needs no configuration, so it always runs.
+// Wires VIES.
 type viesRegister struct{}
 
 func (*viesRegister) flags(*pflag.FlagSet) {}

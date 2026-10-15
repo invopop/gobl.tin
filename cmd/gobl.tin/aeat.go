@@ -10,12 +10,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// envAEATPassword names the environment variable with the password of the
-// AEAT certificate, so that the password never appears in the process list.
+// Environment variable with the AEAT certificate password.
 const envAEATPassword = "AEAT_CERT_PASSWORD"
 
-// aeatRegister wires AEAT. It runs only when a certificate is given, because
-// AEAT requires mutual TLS.
+// Wires AEAT, when a certificate is given.
 type aeatRegister struct {
 	cert string
 	seal bool
@@ -41,8 +39,7 @@ func (r *aeatRegister) verifier() (tin.Verifier, error) {
 	return aeat.New(cert, opts...), nil
 }
 
-// loadCertificate reads a PKCS#12 file into a TLS certificate with its
-// chain.
+// Reads a PKCS#12 certificate file.
 func loadCertificate(path, password string) (tls.Certificate, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

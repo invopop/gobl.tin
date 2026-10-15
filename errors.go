@@ -7,47 +7,28 @@ import (
 	"time"
 )
 
-// ABOUT: An invalid identifier is not represented here at all; it is a Check
-// with StatusInvalid. A register that cannot answer is a Check with
-// StatusUnverified that carries the error. Errors cover only the cases where
-// the register could not give an answer. Callers match on the sentinels with
-// errors.Is and on RateLimitedError with errors.As. Errors that come from an
-// HTTP response carry the status via Code(), so callers can distinguish
-// structurally.
-//
-// Verifiers map HTTP statuses as follows: 400 is ErrInput, 429 is
-// RateLimitedError, and every other unexpected status, including edge
-// responses such as 403, is ErrServer with the status as its code. A register
-// that reports a failure in the body of a successful response maps the same
-// way, by the failure's meaning. ErrNetwork is reserved for failures below
-// HTTP: dial, timeout, and unreadable bodies.
+// ABOUT: errors are for a register that cannot answer; an invalid identifier
+// is a Check with StatusInvalid. HTTP statuses map as: 400 is ErrInput, 429 is
+// RateLimitedError, any other is ErrServer with the status as code.
 
 var (
-	// ErrNetwork wraps transport failures: dial errors, timeouts, and
-	// responses that could not be decoded. It says nothing about the identifier,
-	// only that the request failed.
+	// ErrNetwork is a transport failure: dial, timeout or unreadable response.
 	ErrNetwork = NewError("network")
 
-	// ErrServer is returned when the register answered with an unexpected
-	// status. The HTTP status is available via Code(). A verifier that is
-	// configured wrong is ErrServer without a code.
+	// ErrServer is an unexpected register answer, with the HTTP status as
+	// code, or a configuration error, without a code.
 	ErrServer = NewError("server")
 
-	// ErrInput is returned when the input is malformed or incomplete: a
-	// missing tax ID, an empty code, party data a register needs but the
-	// request lacks, or a request the register rejected as badly formed.
-	// Without a code, it comes from the verifier before any request, and its
-	// message says what the identifier or the party lacks.
+	// ErrInput is malformed or incomplete input. Without a code, it comes
+	// before any request and its message says what the input lacks.
 	ErrInput = NewError("input")
 )
 
-// RateLimitedError reports that the register's request budget is exhausted,
-// and how long to wait, so a caller can requeue with a precise delay instead
-// of a blind backoff.
+// RateLimitedError reports a rate limit and how long to wait.
 type RateLimitedError struct {
 	RetryAfter time.Duration
-	// Reason is the register's own name for the limit, when it gives one,
-	// such as VIES's MS_MAX_CONCURRENT_REQ.
+	// Reason is the register's name for the limit, such as
+	// MS_MAX_CONCURRENT_REQ.
 	Reason string
 }
 
@@ -59,8 +40,7 @@ func (e *RateLimitedError) Error() string {
 	return "register: rate limited, retry in " + e.RetryAfter.String()
 }
 
-// Code returns 429, the status of a rate limit, also when the register
-// reports the limit in the body of a successful response.
+// Code returns 429.
 func (e *RateLimitedError) Code() string {
 	return "429"
 }
@@ -84,8 +64,7 @@ func (e *Error) copy() *Error {
 	return ne
 }
 
-// WithCause attaches an underlying error, preserving it for errors.Is and
-// errors.As via Unwrap.
+// WithCause attaches an underlying error.
 func (e *Error) WithCause(cause error) *Error {
 	ne := e.copy()
 	ne.cause = cause
@@ -99,8 +78,7 @@ func (e *Error) WithCode(code string) *Error {
 	return ne
 }
 
-// Code provides the code of the error, usually the HTTP status, or an empty
-// string when there is none.
+// Code returns the code of the error, usually the HTTP status.
 func (e *Error) Code() string {
 	return e.code
 }
@@ -132,8 +110,7 @@ func (e *Error) Error() string {
 	return strings.Join(out, ": ")
 }
 
-// Is checks to see if the target error matches the current error or part of
-// the chain.
+// Is matches errors by key, or the cause.
 func (e *Error) Is(target error) bool {
 	t, ok := target.(*Error)
 	if !ok {
