@@ -1,8 +1,7 @@
 // Package dgfip implements the verifier for French VAT numbers. The DGFiP,
 // the French tax administration, publishes every active French VAT number as
 // open data; the Annuaire des Entreprises gives the registered name and the
-// structured address of the company. A number that the open data does not
-// hold yet is checked live in VIES, which reads the DGFiP register.
+// structured address of the company.
 package dgfip
 
 import (
@@ -18,7 +17,6 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	tin "github.com/invopop/gobl.tin"
-	"github.com/invopop/gobl.tin/vies"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
@@ -62,7 +60,6 @@ type Verifier struct {
 	companiesURL string
 	timeout      time.Duration
 	http         *http.Client
-	live         tin.Verifier
 	dataset      *resty.Client
 	companies    *resty.Client
 
@@ -105,14 +102,6 @@ func WithHTTPClient(c *http.Client) Option {
 	}
 }
 
-// WithLive sets the verifier that checks live a number the dataset does not
-// hold. It defaults to VIES.
-func WithLive(live tin.Verifier) Option {
-	return func(v *Verifier) {
-		v.live = live
-	}
-}
-
 // New creates a DGFiP verifier.
 func New(opts ...Option) *Verifier {
 	v := &Verifier{
@@ -127,13 +116,6 @@ func New(opts ...Option) *Verifier {
 		if err := checkBaseURL(u); err != nil {
 			v.initErr = err
 		}
-	}
-	if v.live == nil {
-		vopts := []vies.Option{vies.WithTimeout(v.timeout)}
-		if v.http != nil {
-			vopts = append(vopts, vies.WithHTTPClient(v.http))
-		}
-		v.live = vies.New(vopts...)
 	}
 	v.dataset = v.client(v.datasetURL)
 	v.companies = v.client(v.companiesURL)
@@ -176,11 +158,13 @@ func (v *Verifier) Supports(id tin.Identifier) bool {
 	return id.Country == l10n.FR.Tax()
 }
 
-// Verify checks a French VAT number. A number in the dataset is valid. The
-// dataset lags up to a few working days, so a number it does not hold is
-// checked live, and that answer is final. A valid number gets the name and
-// the address of the company. Any failure, including on the company query,
-// is an error, so that the next verifier answers.
+// Verify checks a French VAT number. A number in the dataset is valid, and
+// gets the name and the address of the company. A number it does not hold is
+// invalid: the dataset is the DGFiP's own list of active numbers. It is
+// published on working days only, so a number attributed in the last days
+// can be invalid until the next publication; waiting for VIES, which France
+// throttles, is slower than that gap is worth. Any failure, including on the
+// company query, is an error, so that the next verifier answers.
 func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, error) {
 	if v.initErr != nil {
 		return nil, v.initErr
@@ -197,13 +181,7 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 		return nil, err
 	}
 	if !found {
-		ans, err := v.live.Verify(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		if ans.Status != tin.StatusValid {
-			return &tin.Answer{Status: ans.Status, TaxID: taxID(code), CheckedAt: time.Now().UTC()}, nil
-		}
+		return &tin.Answer{Status: tin.StatusInvalid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}, nil
 	}
 	rec, err := v.company(ctx, code.String()[2:])
 	if err != nil {
