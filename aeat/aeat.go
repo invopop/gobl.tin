@@ -23,9 +23,7 @@ import (
 // Source names AEAT as the register in checks.
 const Source cbc.Key = "aeat"
 
-// DefaultBaseURL is the AEAT host for personal and representative
-// certificates. The census is read only, and the AEAT test environment holds
-// no real taxpayers, so checks always run against production.
+// DefaultBaseURL is the AEAT host for personal and representative certificates.
 const DefaultBaseURL = "https://www1.agenciatributaria.gob.es"
 
 // SealBaseURL is the AEAT host for seal certificates (certificados de sello).
@@ -36,50 +34,36 @@ const DefaultTimeout = 15 * time.Second
 
 const vnifPath = "/wlpl/BURT-JDIT/ws/VNifV2SOAP"
 
-// defaultRetryAfter is used when AEAT rate limits. AEAT does not document
-// its limits, so this is a polite guess.
+// defaultRetryAfter is used when AEAT rate limits.
 const defaultRetryAfter = time.Minute
 
-// Namespaces of the VNifV2 request. AEAT's own example uses http for the
-// request schema, and gov-es sends it the same way.
+// Namespaces of the VNifV2 request.
 const (
 	soapNS = "http://schemas.xmlsoap.org/soap/envelope/"
 	vnifNS = "http://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/burt/jdit/ws/VNifV2Ent.xsd"
 )
 
-// Results of the VNifV2 service, upper cased and without spaces. AEAT
-// writes them in mixed case, such as "No identificado -similar".
+// All possible results of the VNifV2 service, upper-cased.
 const (
-	// resultIdentified means the NIF exists and, for a natural person, the
-	// name matches.
+	// NIF exists (and name matches for natural person).
 	resultIdentified = "IDENTIFICADO"
 
-	// resultIdentifiedDeregistered means an entity with the NIF exists in
-	// state baja.
+	// NIF exists in state 'baja'.
 	resultIdentifiedDeregistered = "IDENTIFICADO-BAJA"
 
-	// resultIdentifiedRevoked means an entity with the NIF exists in state
-	// baja because AEAT revoked the NIF.
+	// NIF exists in state 'baja' because it was revoked.
 	resultIdentifiedRevoked = "IDENTIFICADO-REVOCADO"
 
-	// resultNotIdentified means AEAT does not hold the NIF, or does not
-	// hold it with the name given.
+	// NIF not found, or not found with the given name.
 	resultNotIdentified = "NOIDENTIFICADO"
 
-	// resultNotIdentifiedSimilar means a natural person with the NIF exists,
-	// but the name given differs in small details. AEAT returns its name.
+	// NIF found with similar name.
 	resultNotIdentifiedSimilar = "NOIDENTIFICADO-SIMILAR"
 )
 
-// reasonPersonNotIdentified explains an invalid answer for a natural person.
-// AEAT checks the DNI or NIE and the name as a pair, and does not say which
-// of the two failed: the DNI or NIE alone may well be registered.
 const reasonPersonNotIdentified = "AEAT does not identify the DNI or NIE with the name given"
 
-// placeholderNIF is a NIF that AEAT identifies under the name "OPERACION NO
-// IDENTIFICADA EN CONSTITUCIÓN". It stands for an operation without an
-// identified party, so it never identifies a real party and is not
-// identified, without a request.
+// Placeholder NIF that AEAT uses for operations without an identified party.
 const placeholderNIF cbc.Code = "B99999997"
 
 // Verifier is the AEAT verifier. It implements tin.Verifier.
@@ -89,17 +73,14 @@ type Verifier struct {
 	timeout time.Duration
 	conn    *resty.Client
 
-	// initErr records an invalid construction, such as a missing
-	// certificate or an unparseable base URL. Verify returns it, so a
-	// misconfiguration surfaces on the first call.
-	initErr error
+	// Returned by Verify when New got an invalid configuration.
+	configErr error
 }
 
 // Option configures the Verifier.
 type Option func(*Verifier)
 
-// WithBaseURL points the API at a different endpoint. It exists so that tests
-// can run against a local server instead of the live AEAT service. It takes
+// WithBaseURL points the API at a different endpoint, for tests. It takes
 // precedence over WithSeal.
 func WithBaseURL(url string) Option {
 	return func(v *Verifier) {
@@ -107,8 +88,7 @@ func WithBaseURL(url string) Option {
 	}
 }
 
-// WithSeal sends requests to SealBaseURL, which AEAT requires for a seal
-// certificate.
+// WithSeal sends requests to SealBaseURL, required by AEAT for seal certificates.
 func WithSeal() Option {
 	return func(v *Verifier) {
 		v.seal = true
@@ -122,10 +102,7 @@ func WithTimeout(d time.Duration) Option {
 	}
 }
 
-// New creates an AEAT verifier. AEAT requires mutual TLS, so the verifier
-// presents the certificate on every request. The certificate must be one
-// that the AEAT electronic office accepts: a personal, representative or
-// seal certificate.
+// New creates an AEAT verifier with mutual TLS (certificate on every request).
 func New(cert tls.Certificate, opts ...Option) *Verifier {
 	v := &Verifier{timeout: DefaultTimeout}
 	for _, opt := range opts {
@@ -138,16 +115,14 @@ func New(cert tls.Certificate, opts ...Option) *Verifier {
 		}
 	}
 	if len(cert.Certificate) == 0 || cert.PrivateKey == nil {
-		// A missing certificate is a problem with the configuration, not
-		// with the identifier, so it is the register failing to answer.
-		v.initErr = tin.ErrServer.WithMessage("no client certificate provided")
+		v.configErr = tin.ErrServer.WithMessage("no client certificate provided")
 	}
 	if u, err := url.Parse(v.baseURL); err != nil {
-		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)
+		v.configErr = tin.ErrServer.WithMsgf("invalid base URL %q", v.baseURL).WithCause(err)
 	} else if u.Scheme != "http" && u.Scheme != "https" {
-		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: scheme must be http or https", v.baseURL)
+		v.configErr = tin.ErrServer.WithMsgf("invalid base URL %q: scheme must be http or https", v.baseURL)
 	} else if u.Hostname() == "" {
-		v.initErr = tin.ErrServer.WithMsgf("invalid base URL %q: missing host", v.baseURL)
+		v.configErr = tin.ErrServer.WithMsgf("invalid base URL %q: missing host", v.baseURL)
 	}
 	v.conn = resty.NewWithClient(&http.Client{Transport: transport(cert)}).
 		SetBaseURL(v.baseURL).
@@ -155,10 +130,8 @@ func New(cert tls.Certificate, opts ...Option) *Verifier {
 	return v
 }
 
-// transport builds an HTTP transport that presents the certificate. AEAT
-// asks for the client certificate through a TLS renegotiation, so the
-// transport allows one. Server certificates are checked against the system
-// roots.
+// HTTP transport that presents the certificate. Allows TLS renegotiation
+// (required by AEAT).
 func transport(cert tls.Certificate) *http.Transport {
 	tr, ok := http.DefaultTransport.(*http.Transport)
 	if ok {
@@ -174,7 +147,6 @@ func transport(cert tls.Certificate) *http.Transport {
 	return tr
 }
 
-// requestEnvelope is the SOAP request for one taxpayer.
 type requestEnvelope struct {
 	XMLName xml.Name `xml:"soapenv:Envelope"`
 	SoapNS  string   `xml:"xmlns:soapenv,attr"`
@@ -185,14 +157,11 @@ type requestEnvelope struct {
 	} `xml:"soapenv:Body"`
 }
 
-// taxpayerRequest is the NIF and the name to identify.
 type taxpayerRequest struct {
 	NIF  string `xml:"vnif:Nif"`
 	Name string `xml:"vnif:Nombre"`
 }
 
-// responseEnvelope is the SOAP response, matched on local names so that any
-// namespace prefix works.
 type responseEnvelope struct {
 	Body struct {
 		Fault  *fault `xml:"Fault"`
@@ -202,15 +171,13 @@ type responseEnvelope struct {
 	} `xml:"Body"`
 }
 
-// taxpayerResponse is the outcome for one taxpayer.
 type taxpayerResponse struct {
 	NIF    string `xml:"Nif"`
 	Name   string `xml:"Nombre"`
 	Result string `xml:"Resultado"`
 }
 
-// fault is a SOAP fault. AEAT answers with one when the request is badly
-// formed, with the code env:Client.
+// SOAP fault: AEAT's answer to a malformed request.
 type fault struct {
 	Code    string `xml:"faultcode"`
 	Message string `xml:"faultstring"`
@@ -226,9 +193,8 @@ func (v *Verifier) Supports(id tin.Identifier) bool {
 	return id.Country == l10n.ES.Tax()
 }
 
-// PartyKey returns the name of a natural person, in upper case with single
-// spaces, because AEAT compares it and its answer depends on it. It returns
-// "" for an entity, which AEAT identifies from the NIF alone.
+// PartyKey returns the normalized name of a natural person, or "" for an
+// entity.
 func (v *Verifier) PartyKey(req tin.Request) string {
 	if req.Party == nil || !naturalPerson(req.Identifier.Code) {
 		return ""
@@ -236,13 +202,10 @@ func (v *Verifier) PartyKey(req tin.Request) string {
 	return strings.Join(strings.Fields(strings.ToUpper(req.Party.Name)), " ")
 }
 
-// Verify identifies the request's NIF in the AEAT census. AEAT needs the
-// name of a natural person, so the party's name is sent with the NIF. An
-// entity is identified from the NIF alone. A NIF that AEAT does not
-// identify is an Answer with StatusInvalid, not an error.
+// Verify identifies the NIF in the AEAT census. A natural person needs a name.
 func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, error) {
-	if v.initErr != nil {
-		return nil, v.initErr
+	if v.configErr != nil {
+		return nil, v.configErr
 	}
 	id := req.Identifier
 	if id.Code == "" {
@@ -276,9 +239,7 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	switch result {
 	case resultIdentified, resultIdentifiedDeregistered, resultIdentifiedRevoked:
 		ans.Status = tin.StatusValid
-		// AEAT compares the name of a natural person and accepts small
-		// differences, so an identified answer confirms the name sent. It
-		// writes the name its own way, with the surnames first.
+		// AEAT accepts small differences in a natural person's name.
 		rec.NameConfirmed = naturalPerson(id.Code)
 		switch result {
 		case resultIdentifiedDeregistered:
@@ -287,10 +248,8 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 			rec.Status = tin.RecordStatusRevoked
 		}
 	case resultNotIdentifiedSimilar:
-		// AEAT returns the name it holds, so the mismatch shows it.
 		ans.Status = tin.StatusInvalid
 	case resultNotIdentified:
-		// AEAT echoes the name given, which is no record.
 		ans.Status = tin.StatusInvalid
 		rec = nil
 	default:
@@ -305,19 +264,13 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	return ans, nil
 }
 
-// naturalPerson reports whether the NIF belongs to a natural person: a DNI,
-// a NIE, or a K, L or M code.
+// Natural person: a DNI, a NIE, or a K, L or M code.
 func naturalPerson(code cbc.Code) bool {
-	switch es.TaxIdentityKey(&tax.Identity{Country: l10n.ES.Tax(), Code: code}) {
-	case es.TaxIdentityNational, es.TaxIdentityForeigner, es.TaxIdentityOther:
-		return true
-	default:
-		return false
-	}
+	tID := &tax.Identity{Country: l10n.ES.Tax(), Code: code}
+	return es.TaxIdentityKey(tID).In(es.TaxIdentityNational, es.TaxIdentityForeigner, es.TaxIdentityOther)
 }
 
-// identify posts one taxpayer to the VNifV2 service and returns the outcome
-// with the HTTP status of the response.
+// Posts one taxpayer to the VNifV2 service and returns the outcome.
 func (v *Verifier) identify(ctx context.Context, code cbc.Code, name string) (*taxpayerResponse, string, error) {
 	env := &requestEnvelope{SoapNS: soapNS, VnifNS: vnifNS}
 	env.Body.Taxpayer = taxpayerRequest{NIF: code.String(), Name: name}
@@ -337,14 +290,11 @@ func (v *Verifier) identify(ctx context.Context, code cbc.Code, name string) (*t
 
 	status := strconv.Itoa(resp.StatusCode())
 	if resp.StatusCode() == http.StatusTooManyRequests {
-		// A rate limit wins over the body, so that callers back off.
 		return nil, status, statusError(resp)
 	}
 	out := new(responseEnvelope)
 	decodeErr := xml.Unmarshal(resp.Body(), out)
 	if decodeErr == nil && out.Body.Fault != nil {
-		// SOAP 1.1 sends a fault with status 500, and AEAT may also send
-		// one with status 200.
 		return nil, status, faultError(status, out.Body.Fault)
 	}
 	if !resp.IsSuccess() {
@@ -359,9 +309,7 @@ func (v *Verifier) identify(ctx context.Context, code cbc.Code, name string) (*t
 	return &out.Body.Output.Taxpayers[0], status, nil
 }
 
-// faultError maps a SOAP fault onto the tin error taxonomy: a client fault
-// is a request that AEAT rejects as badly formed, and every other fault is
-// the register failing to answer.
+// Maps a SOAP fault onto the tin error taxonomy.
 func faultError(status string, f *fault) error {
 	msg := clamp(strings.TrimSpace(f.Message))
 	code := strings.TrimSpace(f.Code)
@@ -371,8 +319,7 @@ func faultError(status string, f *fault) error {
 	return tin.ErrServer.WithCode(status).WithMessage(msg)
 }
 
-// statusError maps a non-2xx response without a SOAP fault onto the tin
-// error taxonomy.
+// Maps non-2xx responses without SOAP fault to the tin error taxonomy.
 func statusError(resp *resty.Response) error {
 	code := resp.StatusCode()
 	status := strconv.Itoa(code)
@@ -382,15 +329,12 @@ func statusError(resp *resty.Response) error {
 	case http.StatusTooManyRequests:
 		return &tin.RateLimitedError{RetryAfter: defaultRetryAfter}
 	default:
-		// Everything else, including a 403 for a certificate that AEAT
-		// does not accept, is the register failing to answer.
+		// Everything else is the register failing to answer.
 		return tin.ErrServer.WithCode(status).WithMessage(clamp(string(resp.Body())))
 	}
 }
 
-// confirmedTaxID builds the tax identity as AEAT confirmed it. AEAT returns
-// the NIF padded to nine characters, and the current NIF of an entity whose
-// first letter changed with its legal form.
+// Tax identity as AEAT returns it, or as sent.
 func confirmedTaxID(code cbc.Code, out *taxpayerResponse) *tax.Identity {
 	tid := &tax.Identity{Country: l10n.ES.Tax(), Code: cbc.Code(strings.TrimSpace(out.NIF))}
 	if tid.Code == "" {
@@ -399,18 +343,13 @@ func confirmedTaxID(code cbc.Code, out *taxpayerResponse) *tax.Identity {
 	return tid
 }
 
-// normalizeResult upper cases a result and removes its spaces, so that
-// "No identificado -similar" reads as "NOIDENTIFICADO-SIMILAR".
 func normalizeResult(s string) string {
 	return strings.Join(strings.Fields(strings.ToUpper(s)), "")
 }
 
-// maxMessage bounds any text taken from an AEAT response into an error, so an
-// untrusted body cannot make a failure arbitrarily large.
+// Maximum length of response text in an error.
 const maxMessage = 200
 
-// clamp cuts s to maxMessage bytes and drops invalid UTF-8, so a message
-// taken from an untrusted body is always valid text.
 func clamp(s string) string {
 	if len(s) > maxMessage {
 		s = s[:maxMessage]

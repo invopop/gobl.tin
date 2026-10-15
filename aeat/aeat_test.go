@@ -104,7 +104,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("default base URL and timeout", func(t *testing.T) {
 		v := New(cert)
-		require.NoError(t, v.initErr)
+		require.NoError(t, v.configErr)
 		assert.Equal(t, DefaultBaseURL, v.baseURL)
 		assert.Equal(t, DefaultTimeout, v.conn.GetClient().Timeout)
 	})
