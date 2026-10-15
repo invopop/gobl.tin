@@ -139,6 +139,14 @@ func TestVerify(t *testing.T) {
 		assert.False(t, report.Valid())
 	})
 
+	t.Run("an invalid answer keeps the register's reason", func(t *testing.T) {
+		fake := &fakeVerifier{source: "aeat", checks: map[cbc.Code]*Answer{"000000000": {Status: StatusInvalid, Reason: "the pair does not match"}}}
+		party := &org.Party{TaxID: &tax.Identity{Country: "DE", Code: "000000000"}}
+		report, err := New(fake).Verify(ctx, party)
+		require.NoError(t, err)
+		assert.Equal(t, "the pair does not match", report.Checks[0].Reason)
+	})
+
 	t.Run("register failure marks the check unverified", func(t *testing.T) {
 		fake := &fakeVerifier{
 			source: "vies",

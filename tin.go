@@ -124,6 +124,7 @@ func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Ch
 	default:
 		check.Status = ans.Status
 		check.Record = ans.Record
+		check.Reason = ans.Reason
 		check.CheckedAt = ans.CheckedAt
 		if check.CheckedAt.IsZero() {
 			check.CheckedAt = time.Now().UTC()

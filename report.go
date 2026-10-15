@@ -68,6 +68,10 @@ type Answer struct {
 
 	// CheckedAt is when the register answered. Zero means now.
 	CheckedAt time.Time `json:"checked_at,omitzero"`
+
+	// Reason says why the register answered invalid, when it knows more
+	// than the status, in words a user can read.
+	Reason string `json:"reason,omitempty"`
 }
 
 // Status is the outcome of one check.
@@ -113,6 +117,10 @@ type Check struct {
 
 	// Mismatches lists the fields where the party disagrees with the record.
 	Mismatches []*Mismatch `json:"mismatches,omitempty"`
+
+	// Reason is the register's reason for an invalid answer, when it gives
+	// one.
+	Reason string `json:"reason,omitempty"`
 
 	// Failure is the register failure message when Status is unverified.
 	Failure string `json:"failure,omitempty"`
