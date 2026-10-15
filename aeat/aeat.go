@@ -69,6 +69,7 @@ const placeholderNIF cbc.Code = "B99999997"
 // Verifier is the AEAT verifier. It implements tin.Verifier.
 type Verifier struct {
 	baseURL string
+	custom  bool // baseURL set by WithBaseURL, even if empty
 	seal    bool
 	timeout time.Duration
 	conn    *resty.Client
@@ -85,6 +86,7 @@ type Option func(*Verifier)
 func WithBaseURL(url string) Option {
 	return func(v *Verifier) {
 		v.baseURL = url
+		v.custom = true
 	}
 }
 
@@ -108,7 +110,7 @@ func New(cert tls.Certificate, opts ...Option) *Verifier {
 	for _, opt := range opts {
 		opt(v)
 	}
-	if v.baseURL == "" {
+	if !v.custom {
 		v.baseURL = DefaultBaseURL
 		if v.seal {
 			v.baseURL = SealBaseURL
