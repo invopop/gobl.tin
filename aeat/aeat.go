@@ -71,6 +71,11 @@ const (
 	resultNotIdentifiedSimilar = "NOIDENTIFICADO-SIMILAR"
 )
 
+// reasonPersonNotIdentified explains an invalid answer for a natural person.
+// AEAT checks the DNI or NIE and the name as a pair, and does not say which
+// of the two failed: the DNI or NIE alone may well be registered.
+const reasonPersonNotIdentified = "AEAT does not identify the DNI or NIE with the name given"
+
 // placeholderNIF is a NIF that AEAT identifies under the name "OPERACION NO
 // IDENTIFICADA EN CONSTITUCIÓN". It stands for an operation without an
 // identified party, so it never identifies a real party and is not
@@ -290,6 +295,9 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 		rec = nil
 	default:
 		return nil, tin.ErrServer.WithCode(status).WithMsgf("unknown result %q", clamp(out.Result))
+	}
+	if ans.Status == tin.StatusInvalid && naturalPerson(id.Code) {
+		ans.Reason = reasonPersonNotIdentified
 	}
 	if rec != nil && (rec.Name != "" || rec.Status != "") {
 		ans.Record = rec

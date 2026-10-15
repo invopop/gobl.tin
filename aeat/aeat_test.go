@@ -293,12 +293,23 @@ func TestVerifier(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.status, ans.Status)
 			assert.Equal(t, tt.record, ans.Record)
+			assert.Empty(t, ans.Reason, "an entity is identified from the NIF alone")
 			assert.True(t, ans.CheckedAt.After(before))
 			require.NotNil(t, ans.TaxID)
 			assert.Equal(t, "ES", ans.TaxID.Country.String())
 			assert.Equal(t, "B85905495", ans.TaxID.Code.String())
 		})
 	}
+
+	t.Run("a natural person not identified has the reason: the DNI and the name do not match", func(t *testing.T) {
+		for _, result := range []string{"No identificado", "No identificado -similar"} {
+			v, _ := serve(t, http.StatusOK, response("99999999R", "ESPAÑOL ESPAÑOL JUAN", result))
+			ans, err := v.Verify(context.Background(), tin.Request{Identifier: person, Party: &org.Party{Name: "Ana López"}})
+			require.NoError(t, err, result)
+			assert.Equal(t, tin.StatusInvalid, ans.Status, result)
+			assert.Equal(t, "AEAT does not identify the DNI or NIE with the name given", ans.Reason, result)
+		}
+	})
 
 	t.Run("an empty name with a status is a record", func(t *testing.T) {
 		v, _ := serve(t, http.StatusOK, response("B85905495", "", "Identificado-Baja"))
