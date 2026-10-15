@@ -138,6 +138,17 @@ func TestVerify(t *testing.T) {
 		assert.Equal(t, &org.Address{Number: "1B", Street: "AVENUE DE PARIS", StreetExtra: "BATIMENT A", PostOfficeBox: "BP 12", Code: "75441", Locality: "PARIS CEDEX 09", Country: "FR"}, ans.Record.Address)
 	})
 
+	t.Run("a CEDEX without a postcode is an address", func(t *testing.T) {
+		body := `{"results":[{"siren":"552032534","nom_raison_sociale":"DANONE","etat_administratif":"A",
+"siege":{"numero_voie":"1","type_voie":"AVENUE","libelle_voie":"DE PARIS","code_postal":"","libelle_commune":"PARIS","cedex":"75441","libelle_cedex":"PARIS CEDEX 09"}}]}`
+		v, _, _ := setup(t, ok(inDataset), ok(body))
+		ans, err := v.Verify(context.Background(), request(danone))
+		require.NoError(t, err)
+		require.NotNil(t, ans.Record.Address)
+		assert.Equal(t, cbc.Code("75441"), ans.Record.Address.Code)
+		assert.Equal(t, "PARIS CEDEX 09", ans.Record.Address.Locality)
+	})
+
 	t.Run("a head office abroad gives no address", func(t *testing.T) {
 		body := `{"results":[{"siren":"552032534","nom_raison_sociale":"DANONE","etat_administratif":"A","siege":{"libelle_voie":"MAIN STREET","code_postal":"","code_pays_etranger":"99132"}}]}`
 		v, _, _ := setup(t, ok(inDataset), ok(body))

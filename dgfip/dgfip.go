@@ -302,7 +302,8 @@ func (c *company) name() string {
 }
 
 // address maps the head office onto a GOBL address. It gives no address for
-// an establishment abroad, without a postcode, or with an undisclosed field.
+// an establishment abroad, without a postcode or CEDEX, or with an undisclosed
+// field.
 func (e *establishment) address() *org.Address {
 	fields := []string{e.Number, e.Repetition, e.StreetType, e.StreetName, e.Complement, e.SpecialDelivery, e.PostCode, e.Locality, e.Cedex, e.CedexLocality}
 	for _, f := range fields {
@@ -310,7 +311,7 @@ func (e *establishment) address() *org.Address {
 			return nil
 		}
 	}
-	if e.ForeignCountry != "" || strings.TrimSpace(e.PostCode) == "" {
+	if e.ForeignCountry != "" || strings.TrimSpace(e.PostCode+e.Cedex) == "" {
 		return nil
 	}
 	out := &org.Address{
