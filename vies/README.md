@@ -25,6 +25,8 @@ VIES gives the address as one free text, written differently by each member stat
 |---|---|---|
 | `IT` | Two lines: the street with its house number, then the postcode, the locality and the province code. `VIA DEL BOSCO DEGLI ARVALI 84 INT 7` / `00148 ROMA RM` | `street` "VIA DEL BOSCO DEGLI ARVALI", `num` "84", `street_extra` "INT 7", `code` "00148", `locality` "ROMA", `region` "RM" |
 
+The Italian street line must start with a street type, such as `VIA`, `PIAZZA` or `LOC.`, so that a line such as `C/O STUDIO ROSSI` is never written as a street.
+
 A member state without a parser gives no address. To add one, collect real VIES answers for it first, then add its parser and a table of those answers as tests.
 
 ## Errors

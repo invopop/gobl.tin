@@ -12,8 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestParseAddressIT uses addresses of companies as VIES gave them on
-// 2026-10-15, plus made-up lines for the shapes the samples did not show.
+// Company addresses from VIES (2026-10-15), plus made-up lines.
 func TestParseAddressIT(t *testing.T) {
 	it := func(street, num, extra, code, locality, region string) *org.Address {
 		return &org.Address{Street: street, Number: num, StreetExtra: extra, Code: cbc.Code(code), Locality: locality, Region: region, Country: "IT"}
@@ -38,6 +37,9 @@ func TestParseAddressIT(t *testing.T) {
 		{"empty", "", nil},
 		{"one line", "VIA ROMA 1 00187 ROMA RM", nil},
 		{"three lines", "C/O STUDIO ROSSI\nVIA ROMA 1\n00187 ROMA RM", nil},
+		{"care-of line", "C/O STUDIO ROSSI\n00187 ROMA RM", nil},
+		{"care-of line with a number", "C/O STUDIO ROSSI 12\n00187 ROMA RM", nil},
+		{"street type with a dot", "LOC. SAN PIETRO 4\n06081 ASSISI PG", it("LOC. SAN PIETRO", "4", "", "06081", "ASSISI", "PG")},
 		{"no province", "VIA ROMA 1\n00187 ROMA", nil},
 		{"short postcode", "VIA ROMA 1\n0187 ROMA RM", nil},
 	}

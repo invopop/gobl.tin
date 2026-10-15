@@ -10,24 +10,29 @@ import (
 	"github.com/invopop/gobl/org"
 )
 
-// Italy writes the address in two lines: the street with its house number,
-// then the postcode (CAP), the locality and the province code.
-//
-//	VIA EMILIA EST 1163
-//	41122 MODENA MO
+// Two lines: "VIA EMILIA EST 1163" and "41122 MODENA MO".
 var (
 	itLocalityLine = regexp.MustCompile(`^(\d{5}) (.+) ([A-Z]{2})$`)
 	itHouseNumber  = regexp.MustCompile(`^\d+[A-Z]?(?:[-/]\d+[A-Z]?)?$`)
 )
 
-// itStreetExtras are the words that start the part of the street line after
-// the house number, such as the staircase or the flat: "INT 3", "SC UN INT 14".
+// Words that may follow the house number, such as "INT 3" or "SC UN INT 14".
 var itStreetExtras = []string{"INT", "INTERNO", "SC", "SCALA", "PIANO", "P", "PAL", "PALAZZINA", "LOTTO", "ED", "EDIFICIO"}
 
-// parseAddressIT parses an Italian address. The province code goes to Region,
-// as FatturaPA reads it.
+// Street types a street line must start with, so that a line such as
+// "C/O STUDIO ROSSI" is never taken for a street.
+var itStreetTypes = []string{
+	"VIA", "VIALE", "VIALETTO", "PIAZZA", "PIAZZALE", "PIAZZETTA", "CORSO", "LARGO",
+	"VICOLO", "VICO", "STRADA", "STRADONE", "STRADELLA", "CONTRADA", "LOCALITA", "LOC",
+	"FRAZIONE", "FRAZ", "BORGO", "BORGATA", "LUNGOTEVERE", "LUNGOMARE", "LUNGARNO",
+	"LUNGOLAGO", "SALITA", "CALLE", "CAMPO", "CAMPIELLO", "FONDAMENTA", "RIONE", "CORTE",
+	"TRAVERSA", "GALLERIA", "PASSAGGIO", "ZONA", "REGIONE", "CASCINA", "CIRCONVALLAZIONE",
+	"RAMPA", "SCALINATA", "ALZAIA", "BANCHINA", "MOLO", "PARCO", "QUARTIERE", "SS", "SP",
+}
+
+// The province code goes to Region, as FatturaPA reads it.
 func parseAddressIT(lines []string) *org.Address {
-	if len(lines) != 2 {
+	if len(lines) != 2 || !isStreetIT(lines[0]) {
 		return nil
 	}
 	m := itLocalityLine.FindStringSubmatch(lines[1])
@@ -44,11 +49,9 @@ func parseAddressIT(lines []string) *org.Address {
 	return out
 }
 
-// splitStreetIT splits the street line at the house number: the first
-// number that ends the line or that only an extra such as "INT 3" follows. A
-// number inside the street name, as in "VIA 4 NOVEMBRE 10", is part of the
-// name. "N" before the number is dropped. A line without such a number is all
-// street.
+// The house number is the first number that ends the line or that only an
+// extra follows, so "VIA 4 NOVEMBRE 10" keeps 4 in the name. "N" before it is
+// dropped.
 func splitStreetIT(line string) (street, number, extra string) {
 	words := strings.Fields(line)
 	for i := 1; i < len(words); i++ {
@@ -66,4 +69,9 @@ func splitStreetIT(line string) (street, number, extra string) {
 		return strings.Join(name, " "), words[i], strings.Join(rest, " ")
 	}
 	return line, "", ""
+}
+
+func isStreetIT(line string) bool {
+	first, _, _ := strings.Cut(line, " ")
+	return slices.Contains(itStreetTypes, strings.TrimSuffix(first, "."))
 }
