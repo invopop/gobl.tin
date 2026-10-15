@@ -155,10 +155,7 @@ var concurrencyFailures = []string{
 	"GLOBAL_MAX_CONCURRENT_REQ_TIME",
 }
 
-// checkVatResponse is the successful response from a VAT number check. Valid
-// is a pointer so that an absent field is distinguishable from an explicit
-// false: a body without it is not an answer. The address is one free text,
-// which parseAddress structures for the member states it knows.
+// Valid is a pointer: a body without it is not an answer.
 type checkVatResponse struct {
 	Valid         *bool               `json:"valid"`
 	Name          string              `json:"name"`
