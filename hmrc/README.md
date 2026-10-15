@@ -15,7 +15,7 @@ c := tin.New(
 
 The verifier gets an OAuth token (`client_credentials`, scope `read:vat`), reuses it for its 4 hours, renews it one minute before it expires, and gets a new one once on a 401.
 
-HMRC checks VAT numbers of 9 or 12 digits. The `GD` and `HA` codes of government departments and health authorities are `unsupported`. Northern Ireland (`XI`) VAT numbers are in VIES.
+HMRC checks VAT numbers of 9 or 12 digits. The `GD` and `HA` codes of government departments and health authorities are `unsupported`. Northern Ireland (`XI`) VAT numbers are checked in VIES, which can take their record from HMRC (see the [VIES README](../vies/README.md#northern-ireland)).
 
 The verifier uses the simple check, which takes only the VAT number, not the requester's own UK VAT number.
 

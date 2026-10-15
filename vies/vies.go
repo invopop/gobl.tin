@@ -57,6 +57,10 @@ type Verifier struct {
 	http    *http.Client
 	conn    *resty.Client
 
+	// xiRecords gives the record of a Northern Ireland trader. See
+	// WithNorthernIrelandRecords.
+	xiRecords tin.Verifier
+
 	// initErr records an invalid construction, such as an unparseable base
 	// URL. Verify returns it, so a misconfiguration surfaces on the first call.
 	initErr error
@@ -86,6 +90,19 @@ func WithTimeout(d time.Duration) Option {
 func WithHTTPClient(c *http.Client) Option {
 	return func(a *Verifier) {
 		a.http = c
+	}
+}
+
+// WithNorthernIrelandRecords takes the record of a valid Northern Ireland
+// (XI) VAT number from v, asked for the GB number with the same digits. An XI
+// number is a UK VAT registration, and VIES gives its address as one line
+// that cannot be split safely, while HMRC gives it structured. VIES still
+// decides validity, because only VIES knows whether the trader is registered
+// for the Northern Ireland arrangements. When v fails, or gives no valid
+// record, the VIES record stays.
+func WithNorthernIrelandRecords(v tin.Verifier) Option {
+	return func(a *Verifier) {
+		a.xiRecords = v
 	}
 }
 
@@ -201,7 +218,27 @@ func (a *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if rec.Name != "" || rec.Address != nil {
 		ans.Record = rec
 	}
+	if ans.Status == tin.StatusValid && id.Country == l10n.XI.Tax() && a.xiRecords != nil {
+		if r := a.northernIrelandRecord(ctx, req); r != nil {
+			ans.Record = r
+		}
+	}
 	return ans, nil
+}
+
+// northernIrelandRecord asks the record source for the GB number with the
+// digits of the XI number, and returns its record, or nil.
+func (a *Verifier) northernIrelandRecord(ctx context.Context, req tin.Request) *tin.Record {
+	gb := req
+	gb.Identifier.Country = l10n.GB.Tax()
+	if !a.xiRecords.Supports(gb.Identifier) {
+		return nil
+	}
+	ans, err := a.xiRecords.Verify(ctx, gb)
+	if err != nil || ans == nil || ans.Status != tin.StatusValid {
+		return nil
+	}
+	return ans.Record
 }
 
 // checkVat posts the number to VIES and decodes the answer. The response
