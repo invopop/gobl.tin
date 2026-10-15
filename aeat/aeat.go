@@ -291,7 +291,7 @@ func (v *Verifier) identify(ctx context.Context, code cbc.Code, name string) (*t
 	}
 
 	status := strconv.Itoa(resp.StatusCode())
-	if resp.StatusCode() == http.StatusTooManyRequests {
+	if resp.StatusCode() == http.StatusTooManyRequests || resp.StatusCode() == http.StatusForbidden {
 		return nil, status, statusError(resp)
 	}
 	out := new(responseEnvelope)

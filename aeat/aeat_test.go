@@ -398,6 +398,15 @@ func TestVerifyTransport(t *testing.T) {
 		require.True(t, errors.As(err, &rl))
 	})
 
+	t.Run("a rejected certificate wins over a client fault in the body", func(t *testing.T) {
+		v, _ := serve(t, http.StatusForbidden, faultBody("env:Client", "Certificado no valido"))
+		_, err := v.Verify(context.Background(), tin.Request{Identifier: entity})
+		require.ErrorIs(t, err, tin.ErrServer)
+		var te *tin.Error
+		require.ErrorAs(t, err, &te)
+		assert.Equal(t, "403", te.Code())
+	})
+
 	t.Run("an unreadable body is a network error", func(t *testing.T) {
 		v, _ := serve(t, http.StatusOK, `<html>maintenance`)
 		_, err := v.Verify(context.Background(), tin.Request{Identifier: entity})
