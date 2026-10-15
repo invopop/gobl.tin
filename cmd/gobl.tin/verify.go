@@ -39,8 +39,8 @@ type verifyOpts struct {
 	// Production verifiers, in routing order.
 	registers []register
 
-	// Ordered set the command verifies with. Nil means the registers'; tests
-	// inject fakes.
+	// Ordered set the command verifies with. Nil means the set the registers
+	// build; tests inject fakes.
 	verifiers []tin.Verifier
 }
 
