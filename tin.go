@@ -1,20 +1,5 @@
 // Package tin verifies the identifiers of GOBL parties against the registers
-// that issue them, such as VIES for EU VAT numbers, and reports what the
-// register holds so that a party can be corrected with a patch.
-//
-// ABOUT: A Client holds an ordered list of verifiers. For the tax identity of
-// a party, the first verifier that supports it answers. When that verifier
-// cannot answer, the next verifier that supports the identity is a
-// fallback: it can confirm the identity, but it cannot reject it, because a
-// second register may simply not hold a valid identity. The Client is safe
-// for concurrent use when its verifiers are; it holds no state of its own
-// between calls.
-//
-// Every path in a report is an RFC 6901 JSON Pointer relative to the party
-// document, for example "/tax_id" or "/name". A consumer that patches an
-// invoice prefixes the party's location, "/customer" or "/supplier". Go
-// consumers match on the typed values, Check.TaxID and Mismatch.Field,
-// rather than parsing paths.
+// that issue them.
 package tin
 
 import (
@@ -26,21 +11,14 @@ import (
 	"github.com/invopop/gobl/tax"
 )
 
-// Client verifies the identifiers of a party with an ordered set of
-// verifiers.
-//
-// The Client holds no cache, so every call reaches the register. Caching, and
-// how long an answer stays fresh, is the consuming application's decision.
+// Client verifies the identifiers of a party with an ordered list of
+// verifiers. It holds no cache.
 type Client struct {
 	verifiers []Verifier
 }
 
-// New creates a Client over the verifiers, in routing order: the first
-// verifier that supports an identifier answers for it, and the next ones
-// that support it are fallbacks when it cannot answer. A Client with no
-// verifiers marks every identifier unsupported. Nil entries are skipped,
-// including a typed nil such as a nil *vies.Verifier. Two verifiers may
-// share a Source; order still decides which one answers.
+// New creates a Client over the verifiers, in routing order. Nil verifiers
+// are skipped.
 func New(verifiers ...Verifier) *Client {
 	c := new(Client)
 	for _, v := range verifiers {
@@ -51,9 +29,7 @@ func New(verifiers ...Verifier) *Client {
 	return c
 }
 
-// nilValue reports whether the interface wraps a nil pointer, so that a
-// typed-nil verifier is skipped like a nil one instead of panicking on its
-// first use.
+// Catches a typed nil, such as a nil *vies.Verifier.
 func nilValue(v Verifier) bool {
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
@@ -64,10 +40,7 @@ func nilValue(v Verifier) bool {
 	}
 }
 
-// Verify checks the identifiers of the party: its tax identity. The report
-// carries one Check per identifier, and none for a party without a tax ID
-// code. A register that cannot answer marks its Check unverified; Verify
-// itself returns an error only for a nil party.
+// Verify checks the party's tax ID. It returns an error only for a nil party.
 func (c *Client) Verify(ctx context.Context, party *org.Party) (*Report, error) {
 	if party == nil {
 		return nil, ErrInput.WithMessage("no party provided")
@@ -81,9 +54,7 @@ func (c *Client) Verify(ctx context.Context, party *org.Party) (*Report, error) 
 	return report, nil
 }
 
-// VerifyTaxID checks one tax identity. An identity that no verifier covers
-// is a Check with StatusUnsupported, not an error. The Check has no Path:
-// there is no party document to point into.
+// VerifyTaxID checks one tax identity. The Check has no Path.
 func (c *Client) VerifyTaxID(ctx context.Context, tid *tax.Identity) (*Check, error) {
 	if tid == nil {
 		return nil, ErrInput.WithMessage("no tax identity provided")
@@ -98,8 +69,7 @@ func (c *Client) VerifyTaxID(ctx context.Context, tid *tax.Identity) (*Check, er
 	return check, nil
 }
 
-// SupportsTaxID reports whether a verifier of the Client covers the tax
-// identity. A covered identity can still come back unverified.
+// SupportsTaxID reports whether a verifier covers the tax identity.
 func (c *Client) SupportsTaxID(tid *tax.Identity) bool {
 	if tid == nil {
 		return false
@@ -107,12 +77,11 @@ func (c *Client) SupportsTaxID(tid *tax.Identity) bool {
 	return c.verifierFor(fromTaxID(tid).Identifier) != nil
 }
 
-// check asks the first verifier that supports the identifier and builds
-// the Check from its answer. When that verifier cannot answer, the next
-// verifiers that support the identifier are asked in order, and the first
-// valid answer wins. A fallback's invalid answer is not used: the Check stays
-// unverified with the first verifier's failure. The party is nil for a
-// single identifier.
+// The first verifier that supports the identifier decides: its valid or
+// invalid answer is final. Only when it cannot answer are the next ones
+// asked, and they can confirm but never reject, because a second register may
+// not hold a valid identifier (VIES lacks most Spanish NIFs). A fallback's
+// invalid answer is ignored, and the Check keeps the first verifier's failure.
 func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Check {
 	check := &Check{Path: id.Path, TaxID: id.taxID}
 	req := Request{Identifier: id.Identifier, Party: party}
@@ -153,8 +122,7 @@ func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Ch
 	return check
 }
 
-// ask runs one verifier and returns its answer when it is valid or invalid.
-// Any other answer is a server error.
+// Any answer other than valid or invalid is a server error.
 func ask(ctx context.Context, v Verifier, req Request) (*Answer, error) {
 	ans, err := v.Verify(ctx, req)
 	switch {
@@ -169,8 +137,6 @@ func ask(ctx context.Context, v Verifier, req Request) (*Answer, error) {
 	}
 }
 
-// verifiersFor returns the verifiers that support the identifier, in
-// routing order.
 func (c *Client) verifiersFor(id Identifier) []Verifier {
 	var out []Verifier
 	for _, v := range c.verifiers {
@@ -181,8 +147,6 @@ func (c *Client) verifiersFor(id Identifier) []Verifier {
 	return out
 }
 
-// verifierFor returns the first verifier that supports the identifier, or
-// nil.
 func (c *Client) verifierFor(id Identifier) Verifier {
 	for _, v := range c.verifiers {
 		if v.Supports(id) {
