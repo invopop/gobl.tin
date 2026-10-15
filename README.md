@@ -114,7 +114,7 @@ type Verifier interface {
 
 A verifier whose answer depends on party data, and not only on the identifier, also implements `tin.PartyKeyer`. `PartyKey(req)` returns that data, normalized, or `""` when the answer depends on the identifier only. An application that stores answers adds it to its key, so that two requests with one identifier and different party data never share an answer. For example, AEAT returns the name of a natural person.
 
-`Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. Any status other than `valid` or `invalid`, including empty, makes the check `unverified`.
+`Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. Any other status, including empty, counts as the verifier failing to answer: the next verifier is asked, as for an error.
 
 Document a new verifier in a README in its package, and add it to [Registers](#registers).
 
