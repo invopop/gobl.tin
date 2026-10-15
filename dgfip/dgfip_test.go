@@ -149,6 +149,14 @@ func TestVerify(t *testing.T) {
 		assert.Equal(t, "PARIS CEDEX 09", ans.Record.Address.Locality)
 	})
 
+	t.Run("a company search without a results array is a network error", func(t *testing.T) {
+		for _, body := range []string{`{}`, `{"results":null}`} {
+			v, _, _ := setup(t, ok(inDataset), ok(body))
+			_, err := v.Verify(context.Background(), request(danone))
+			assert.ErrorIs(t, err, tin.ErrNetwork, body)
+		}
+	})
+
 	t.Run("a head office abroad gives no address", func(t *testing.T) {
 		body := `{"results":[{"siren":"552032534","nom_raison_sociale":"DANONE","etat_administratif":"A","siege":{"libelle_voie":"MAIN STREET","code_postal":"","code_pays_etranger":"99132"}}]}`
 		v, _, _ := setup(t, ok(inDataset), ok(body))

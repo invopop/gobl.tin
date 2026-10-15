@@ -224,7 +224,8 @@ func (v *Verifier) inDataset(ctx context.Context, code cbc.Code) (bool, error) {
 
 // companiesResponse is the answer of the Annuaire des Entreprises search.
 type companiesResponse struct {
-	Results []company `json:"results"`
+	// Nil when the response has no results array.
+	Results *[]company `json:"results"`
 }
 
 type company struct {
@@ -266,10 +267,10 @@ func (v *Verifier) company(ctx context.Context, siren string) (*tin.Record, erro
 		return nil, statusError(resp, "company search")
 	}
 	out := new(companiesResponse)
-	if err := json.Unmarshal(resp.Body(), out); err != nil {
+	if err := json.Unmarshal(resp.Body(), out); err != nil || out.Results == nil {
 		return nil, tin.ErrNetwork.WithCode(strconv.Itoa(resp.StatusCode())).WithMessage("decoding company response").WithCause(err)
 	}
-	for _, c := range out.Results {
+	for _, c := range *out.Results {
 		if c.SIREN == siren {
 			return c.record(), nil
 		}
