@@ -159,12 +159,11 @@ func (v *Verifier) Supports(id tin.Identifier) bool {
 }
 
 // Verify checks a French VAT number. A number in the dataset is valid, and
-// gets the name and the address of the company. A number it does not hold is
-// invalid: the dataset is the DGFiP's own list of active numbers. It is
-// published on working days only, so a number attributed in the last days
-// can be invalid until the next publication; waiting for VIES, which France
-// throttles, is slower than that gap is worth. Any failure, including on the
-// company query, is an error, so that the next verifier answers.
+// gets the name and the address of the company. For a number it does not
+// hold, an active company with that SIREN is valid with the status
+// not-vat-registered, such as a business under the franchise en base;
+// otherwise the number is invalid. Any failure is an error, so that the next
+// verifier answers.
 func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, error) {
 	if v.initErr != nil {
 		return nil, v.initErr
@@ -180,14 +179,24 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if err != nil {
 		return nil, err
 	}
-	if !found {
-		return &tin.Answer{Status: tin.StatusInvalid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}, nil
-	}
-	rec, err := v.company(ctx, code.String()[2:])
+	c, err := v.company(ctx, code.String()[2:])
 	if err != nil {
 		return nil, err
 	}
-	return &tin.Answer{Status: tin.StatusValid, Record: rec, TaxID: taxID(code), CheckedAt: time.Now().UTC()}, nil
+	ans := &tin.Answer{Status: tin.StatusValid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}
+	switch {
+	case found:
+		ans.Record = c.record()
+	case c != nil && c.AdminStatus == "A":
+		ans.Record = c.record()
+		if ans.Record == nil {
+			ans.Record = new(tin.Record)
+		}
+		ans.Record.Status = tin.RecordStatusNotVATRegistered
+	default:
+		ans.Status = tin.StatusInvalid
+	}
+	return ans, nil
 }
 
 func taxID(code cbc.Code) *tax.Identity {
@@ -253,9 +262,9 @@ type establishment struct {
 	ForeignCountry  string `json:"code_pays_etranger"`
 }
 
-// company returns the name and the head office address of the company, or
-// nil when the Annuaire des Entreprises does not list it.
-func (v *Verifier) company(ctx context.Context, siren string) (*tin.Record, error) {
+// company returns the company with the SIREN, or nil when the Annuaire des
+// Entreprises does not list it.
+func (v *Verifier) company(ctx context.Context, siren string) (*company, error) {
 	resp, err := v.companies.R().
 		SetContext(ctx).
 		SetQueryParams(map[string]string{"q": siren, "per_page": "5"}).
@@ -270,17 +279,21 @@ func (v *Verifier) company(ctx context.Context, siren string) (*tin.Record, erro
 	if err := json.Unmarshal(resp.Body(), out); err != nil || out.Results == nil {
 		return nil, tin.ErrNetwork.WithCode(strconv.Itoa(resp.StatusCode())).WithMessage("decoding company response").WithCause(err)
 	}
-	for _, c := range *out.Results {
-		if c.SIREN == siren {
-			return c.record(), nil
+	for i := range *out.Results {
+		if c := &(*out.Results)[i]; c.SIREN == siren {
+			return c, nil
 		}
 	}
 	return nil, nil
 }
 
-// record maps the company onto a record. Fields that Sirene does not publish
-// are left empty, so a person who opted out gets no name or address.
+// record maps the company onto a record, or nil for no company. Fields that
+// Sirene does not publish are left empty, so a person who opted out gets no
+// name or address.
 func (c *company) record() *tin.Record {
+	if c == nil {
+		return nil
+	}
 	rec := &tin.Record{Name: c.name(), Address: c.HeadOffice.address()}
 	if c.AdminStatus == "C" {
 		rec.Status = tin.RecordStatusInactive

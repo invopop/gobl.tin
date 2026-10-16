@@ -137,6 +137,9 @@ const (
 	// The register identifies the party, but the identifier has no legal
 	// effect.
 	RecordStatusRevoked RecordStatus = "revoked"
+
+	// The party is active, but not registered for VAT.
+	RecordStatusNotVATRegistered RecordStatus = "not-vat-registered"
 )
 
 // MismatchField names the kind of party field a mismatch is about.

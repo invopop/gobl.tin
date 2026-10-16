@@ -165,14 +165,52 @@ func TestVerify(t *testing.T) {
 		assert.Equal(t, &tin.Record{Name: "DANONE"}, ans.Record)
 	})
 
-	t.Run("a number the dataset does not hold is invalid, without a company query", func(t *testing.T) {
+	t.Run("an active company the dataset does not hold is not registered for VAT", func(t *testing.T) {
 		v, companies, _ := setup(t, ok(notInDataset), ok(danoneCompany))
+		ans, err := v.Verify(context.Background(), request(danone))
+		require.NoError(t, err)
+		assert.Equal(t, tin.StatusValid, ans.Status)
+		assert.Equal(t, cbc.Code(danone), ans.TaxID.Code)
+		assert.Equal(t, &tin.Record{
+			Name:    "DANONE",
+			Address: &org.Address{Number: "59", Street: "RUE LA FAYETTE", Code: "75009", Locality: "PARIS", Country: "FR"},
+			Status:  tin.RecordStatusNotVATRegistered,
+		}, ans.Record)
+		assert.Equal(t, int32(1), companies.Load())
+	})
+
+	t.Run("a person who opted out and is not registered for VAT gets only the status", func(t *testing.T) {
+		body := `{"results":[{"siren":"519341283","nom_complet":"[NON-DIFFUSIBLE]","nom_raison_sociale":"[NON-DIFFUSIBLE]","etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
+"siege":{"numero_voie":"[NON-DIFFUSIBLE]","code_postal":"[NON-DIFFUSIBLE]","libelle_commune":"NIMES"}}]}`
+		v, _, _ := setup(t, ok(notInDataset), ok(body))
+		ans, err := v.Verify(context.Background(), request("0A519341283"))
+		require.NoError(t, err)
+		assert.Equal(t, tin.StatusValid, ans.Status)
+		assert.Equal(t, &tin.Record{Status: tin.RecordStatusNotVATRegistered}, ans.Record)
+	})
+
+	t.Run("a closed company the dataset does not hold is invalid", func(t *testing.T) {
+		body := `{"results":[{"siren":"552032534","nom_raison_sociale":"DANONE","etat_administratif":"C","siege":{}}]}`
+		v, _, _ := setup(t, ok(notInDataset), ok(body))
+		ans, err := v.Verify(context.Background(), request(danone))
+		require.NoError(t, err)
+		assert.Equal(t, tin.StatusInvalid, ans.Status)
+		assert.Nil(t, ans.Record)
+	})
+
+	t.Run("a number that neither the dataset nor the directory holds is invalid", func(t *testing.T) {
+		v, _, _ := setup(t, ok(notInDataset), ok(`{"results":[]}`))
 		ans, err := v.Verify(context.Background(), request(danone))
 		require.NoError(t, err)
 		assert.Equal(t, tin.StatusInvalid, ans.Status)
 		assert.Equal(t, cbc.Code(danone), ans.TaxID.Code)
 		assert.Nil(t, ans.Record)
-		assert.Equal(t, int32(0), companies.Load())
+	})
+
+	t.Run("a failing company search for a number the dataset does not hold is an error", func(t *testing.T) {
+		v, _, _ := setup(t, ok(notInDataset), reply{status: http.StatusServiceUnavailable, body: "down"})
+		_, err := v.Verify(context.Background(), request(danone))
+		assert.ErrorIs(t, err, tin.ErrServer)
 	})
 
 	t.Run("a rate limited dataset waits until the quota resets", func(t *testing.T) {
