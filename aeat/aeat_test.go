@@ -161,7 +161,8 @@ func TestPartyKey(t *testing.T) {
 			Party:      &org.Party{Name: name},
 		}
 	}
-	assert.Equal(t, "JUAN ESPAÑOL ESPAÑOL", v.PartyKey(req("99999999R", "  juan  Español español ")), "a DNI keys on the folded name")
+	assert.Equal(t, "JUAN ESPANOL ESPANOL", v.PartyKey(req("99999999R", "  juan  Español español ")), "a DNI keys on the folded name")
+	assert.Equal(t, v.PartyKey(req("99999999R", "JOSE GARCIA")), v.PartyKey(req("99999999R", "José García.")), "names that match share a key")
 	assert.Equal(t, "JUAN", v.PartyKey(req("X1234567L", "Juan")), "a NIE keys on the name")
 	assert.Equal(t, "JUAN", v.PartyKey(req("K1234567A", "Juan")), "a K code keys on the name")
 	assert.Empty(t, v.PartyKey(req("B85905495", "Invopop")), "an entity keys on the NIF only")

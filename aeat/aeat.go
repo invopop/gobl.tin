@@ -201,7 +201,7 @@ func (v *Verifier) PartyKey(req tin.Request) string {
 	if req.Party == nil || !naturalPerson(req.Identifier.Code) {
 		return ""
 	}
-	return strings.Join(strings.Fields(strings.ToUpper(req.Party.Name)), " ")
+	return tin.NameKey(req.Party.Name)
 }
 
 // Verify identifies the NIF in the AEAT census. A natural person needs a name.

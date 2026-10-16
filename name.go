@@ -17,13 +17,14 @@ var nameElide = regexp.MustCompile(`[.'’]+`)
 // punctuation and surrounding whitespace are folded. Case is compared with Unicode case
 // folding, so "STRAßE" and "STRAẞE" agree. It compares; it never rewrites.
 func NameMatches(a, b string) bool {
-	na := normalizeName(a)
-	return na != "" && strings.EqualFold(na, normalizeName(b))
+	na := NameKey(a)
+	return na != "" && strings.EqualFold(na, NameKey(b))
 }
 
-// normalizeName reduces a name to a comparison key. It keeps letters and
-// digits in any script, because register names across the EU are not ASCII.
-func normalizeName(s string) string {
+// NameKey reduces a name to the key that NameMatches compares. It keeps
+// letters and digits in any script, because register names across the EU are
+// not ASCII.
+func NameKey(s string) string {
 	s = norm.NFD.String(strings.ToValidUTF8(strings.TrimSpace(s), ""))
 	s = strings.ReplaceAll(s, "&", " AND ")
 	s = nameElide.ReplaceAllString(s, "")
