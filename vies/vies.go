@@ -155,14 +155,11 @@ var concurrencyFailures = []string{
 	"GLOBAL_MAX_CONCURRENT_REQ_TIME",
 }
 
-// checkVatResponse is the successful response from a VAT number check. Valid
-// is a pointer so that an absent field is distinguishable from an explicit
-// false: a body without it is not an answer. The address is ignored: VIES
-// returns it as one unstructured string, which cannot honestly become a
-// structured GOBL address.
+// Valid is a pointer: a body without it is not an answer.
 type checkVatResponse struct {
 	Valid         *bool               `json:"valid"`
 	Name          string              `json:"name"`
+	Address       string              `json:"address"`
 	CountryCode   l10n.TaxCountryCode `json:"countryCode"`
 	VatNumber     cbc.Code            `json:"vatNumber"`
 	UserError     string              `json:"userError"`
@@ -197,8 +194,12 @@ func (a *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if *out.Valid {
 		ans.Status = tin.StatusValid
 	}
-	if name := unmask(out.Name); name != "" {
-		ans.Record = &tin.Record{Name: name}
+	rec := &tin.Record{
+		Name:    unmask(out.Name),
+		Address: parseAddress(id.Country, out.Address),
+	}
+	if rec.Name != "" || rec.Address != nil {
+		ans.Record = rec
 	}
 	return ans, nil
 }
