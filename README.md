@@ -115,7 +115,7 @@ A report has one check per identifier: the `tax_id`. A tax ID whose code is empt
 - `source`: the verifier that answered, for example `vies`. Empty when unsupported.
 - `checked_at`: when the register answered. Absent when unsupported or unverified.
 - `record`: what the register holds, when disclosed: the `name`, and the `address` only when it is structured.
-- `mismatches`: fields where the party disagrees with the record. Each carries a typed `field` (`name` or `tax_id`), the JSON Pointer `path` of the value (`/name`, `/tax_id/code`, `/tax_id/country`), the `document` value and the `register` value. The client compares the name with `NameMatches`, which folds case, punctuation and whitespace. A record with `name_confirmed` gives no name mismatch: the register compared the name itself and accepted it, although it may write it differently. The patch still writes the register's name.
+- `mismatches`: fields where the party disagrees with the record. Each carries a typed `field` (`name` or `tax_id`), the JSON Pointer `path` of the value (`/name`, `/tax_id/code`, `/tax_id/country`), the `document` value and the `register` value. The client compares the name with `NameMatches`, which folds case, accents, punctuation and whitespace. A record with `name_confirmed` gives no name mismatch: the register compared the name itself and accepted it, although it may write it differently. The patch still writes the register's name.
 - `reason`: the register's reason for an `invalid` answer, when it gives one.
 - `failure`: the register failure message, only when the status is `unverified`. The Go error is available through `Check.Err()`.
 

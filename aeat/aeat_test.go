@@ -458,7 +458,7 @@ func TestClient(t *testing.T) {
 
 	t.Run("a similar name is shown, but never patched", func(t *testing.T) {
 		v, _ := serve(t, http.StatusOK, response("99999999R", "ESPAÑOL ESPAÑOL JUAN", "No identificado -similar"))
-		party := &org.Party{Name: "ESPANOL ESPANOL JUAN", TaxID: &tax.Identity{Country: "ES", Code: "99999999R"}}
+		party := &org.Party{Name: "ESPANOL JUAN", TaxID: &tax.Identity{Country: "ES", Code: "99999999R"}}
 		report, err := tin.New(v).Verify(context.Background(), party)
 		require.NoError(t, err)
 		check := report.Checks[0]

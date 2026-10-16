@@ -23,7 +23,8 @@ func TestNameMatches(t *testing.T) {
 		{name: "separating punctuation", a: "ACME-GMBH", b: "Acme GmbH", want: true},
 		{name: "accented letters kept", a: "MUÑOZ SL", b: "Muñoz SL", want: true},
 		{name: "different names", a: "ACME GMBH", b: "Other GmbH", want: false},
-		{name: "different accents differ", a: "MUÑOZ SL", b: "Munoz SL", want: false},
+		{name: "accents folded", a: "TELEFONICA SA", b: "Telefónica, S.A.", want: true},
+		{name: "tilde folded", a: "BANCO POPULAR ESPAÑOL SA", b: "Banco Popular Espanol SA", want: true},
 		{name: "empty never matches", a: "", b: "", want: false},
 	}
 	for _, tt := range tests {

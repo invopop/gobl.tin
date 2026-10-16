@@ -10,6 +10,7 @@ require (
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.12.1
 	gitlab.com/flimzy/testy v0.15.0
+	golang.org/x/text v0.38.0
 	software.sslmate.com/src/go-pkcs12 v0.7.0
 )
 
@@ -35,6 +36,5 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

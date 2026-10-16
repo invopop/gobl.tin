@@ -7,7 +7,7 @@ import (
 )
 
 func FuzzNormalizeName(f *testing.F) {
-	for _, seed := range []string{"", "ACME GMBH", "A.C.M.E. GmbH", "Smith & Sons", "  Muñoz   SL ", "O’Brien-Ltd", "---"} {
+	for _, seed := range []string{"", "ACME GMBH", "A.C.M.E. GmbH", "Smith & Sons", "  Muñoz   SL ", "Telefónica, S.A.", "ǰ", "O’Brien-Ltd", "---"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
