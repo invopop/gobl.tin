@@ -395,3 +395,35 @@ func TestSupports(t *testing.T) {
 
 	assert.False(t, New().SupportsTaxID(&tax.Identity{Country: "ES", Code: "B85905495"}))
 }
+
+func TestOnlyTheFirstVerifierIsAsked(t *testing.T) {
+	ctx := context.Background()
+	es := &tax.Identity{Country: "ES", Code: "B85905495"}
+
+	t.Run("its answer is final", func(t *testing.T) {
+		for _, status := range []Status{StatusValid, StatusInvalid} {
+			first := &fakeVerifier{source: "aeat", checks: map[cbc.Code]*Answer{"B85905495": {Status: status}}}
+			next := &fakeVerifier{source: "vies"}
+			check, err := New(first, next).VerifyTaxID(ctx, es)
+			require.NoError(t, err)
+			assert.Equal(t, status, check.Status)
+			assert.Equal(t, cbc.Key("aeat"), check.Source)
+			assert.Empty(t, next.calls, "status %s", status)
+		}
+	})
+
+	t.Run("its failure is final", func(t *testing.T) {
+		for _, first := range []*fakeVerifier{
+			{source: "aeat", errs: map[cbc.Code]error{"B85905495": ErrNetwork.WithMessage("register down")}},
+			{source: "aeat", checks: map[cbc.Code]*Answer{"B85905495": {Status: "maybe"}}},
+		} {
+			next := &fakeVerifier{source: "vies", checks: map[cbc.Code]*Answer{"B85905495": valid("vies", nil)}}
+			check, err := New(first, next).VerifyTaxID(ctx, es)
+			require.NoError(t, err)
+			assert.Equal(t, StatusUnverified, check.Status)
+			assert.Equal(t, cbc.Key("aeat"), check.Source)
+			assert.Error(t, check.Err())
+			assert.Empty(t, next.calls, "no other verifier is asked")
+		}
+	})
+}
