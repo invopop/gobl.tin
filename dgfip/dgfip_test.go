@@ -179,11 +179,22 @@ func TestVerify(t *testing.T) {
 		assert.Equal(t, int32(1), companies.Load())
 	})
 
+	t.Run("a made-up key for an active SIREN the dataset does not hold is invalid", func(t *testing.T) {
+		for _, code := range []cbc.Code{"ZZ552032534", "O7552032534", "28552032534"} {
+			v, companies, _ := setup(t, ok(notInDataset), ok(danoneCompany))
+			ans, err := v.Verify(context.Background(), request(code))
+			require.NoError(t, err)
+			assert.Equal(t, tin.StatusInvalid, ans.Status, code)
+			assert.Nil(t, ans.Record, code)
+			assert.Equal(t, int32(0), companies.Load(), code)
+		}
+	})
+
 	t.Run("a person who opted out and is not registered for VAT gets only the status", func(t *testing.T) {
 		body := `{"results":[{"siren":"519341283","nom_complet":"[NON-DIFFUSIBLE]","nom_raison_sociale":"[NON-DIFFUSIBLE]","etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
 "siege":{"numero_voie":"[NON-DIFFUSIBLE]","code_postal":"[NON-DIFFUSIBLE]","libelle_commune":"NIMES"}}]}`
 		v, _, _ := setup(t, ok(notInDataset), ok(body))
-		ans, err := v.Verify(context.Background(), request("0A519341283"))
+		ans, err := v.Verify(context.Background(), request("64519341283"))
 		require.NoError(t, err)
 		assert.Equal(t, tin.StatusValid, ans.Status)
 		assert.Equal(t, &tin.Record{Status: tin.RecordStatusNotVATRegistered}, ans.Record)

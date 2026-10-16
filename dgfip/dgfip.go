@@ -7,6 +7,7 @@ package dgfip
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/url"
@@ -160,10 +161,10 @@ func (v *Verifier) Supports(id tin.Identifier) bool {
 
 // Verify checks a French VAT number. A number in the dataset is valid, and
 // gets the name and the address of the company. For a number it does not
-// hold, an active company with that SIREN is valid with the status
-// not-vat-registered, such as a business under the franchise en base;
-// otherwise the number is invalid. Any failure is an error, so that the next
-// verifier answers.
+// hold, but with the key computed from the SIREN, an active company with that
+// SIREN is valid with the status not-vat-registered, such as a business under
+// the franchise en base; otherwise the number is invalid. Any failure is an
+// error, so that the next verifier answers.
 func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, error) {
 	if v.initErr != nil {
 		return nil, v.initErr
@@ -179,7 +180,11 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if err != nil {
 		return nil, err
 	}
-	c, err := v.company(ctx, code.String()[2:])
+	siren := code.String()[2:]
+	if !found && code.String()[:2] != sirenKey(siren) {
+		return &tin.Answer{Status: tin.StatusInvalid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}, nil
+	}
+	c, err := v.company(ctx, siren)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +202,13 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 		ans.Status = tin.StatusInvalid
 	}
 	return ans, nil
+}
+
+// sirenKey is the numeric key that GOBL gives a bare SIREN. GOBL skips the
+// checksum of a key with letters.
+func sirenKey(siren string) string {
+	n, _ := strconv.Atoi(siren)
+	return fmt.Sprintf("%02d", (n*100+12)%97)
 }
 
 func taxID(code cbc.Code) *tax.Identity {
