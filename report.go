@@ -40,7 +40,7 @@ type Request struct {
 
 // Answer is what a register says about one identifier.
 type Answer struct {
-	// Status is valid or invalid; anything else counts as a failure.
+	// Status is valid or invalid; anything else makes the check unverified.
 	Status Status `json:"status"`
 
 	Record *Record `json:"record,omitempty"`

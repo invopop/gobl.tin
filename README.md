@@ -29,7 +29,7 @@ Each register has its own package and README:
 
 ### Verify a party
 
-`tin.New` takes an ordered list of verifiers. For the `tax_id` of a party, the first verifier that supports it answers, and the next ones are fallbacks (see [Fallback](#fallback)). `Client.Verify` returns an error only for a nil party. The report has one check per identifier, with the answer that the client selects. When no verifier answers, the check is `unverified` and has the failure of the first verifier.
+`tin.New` takes an ordered list of verifiers. For the `tax_id` of a party, only the first verifier that supports it is asked. When it cannot answer, the check is `unverified` and has its failure; no other verifier is asked. `Client.Verify` returns an error only for a nil party.
 
 ```go
 package main
@@ -68,21 +68,6 @@ func main() {
 
 A client with no verifiers, `tin.New()`, is valid and marks every identifier `unsupported`. Nil verifiers are skipped. Two verifiers may share a `Source`; argument order still decides which one answers.
 
-### Fallback
-
-When the first verifier that supports an identifier cannot answer, the client asks the next verifier that supports it. A verifier cannot answer when it returns an error, no answer, or a status other than `valid` or `invalid`.
-
-A fallback can confirm an identifier, but it cannot reject it. A second register may not hold an identifier that is valid in the first one. For example, VIES holds only the Spanish NIFs registered for intra-EU trade, so a NIF that the AEAT census holds can be invalid in VIES. So:
-
-- A fallback's `valid` answer becomes the check. `Source` names the fallback, and the check has its record.
-- A fallback's `invalid` answer, or its failure, is not used. The next fallback is asked. When none confirms, the check is `unverified` with the failure of the first verifier, and `Source` names the first verifier.
-- An answer from the first verifier, `valid` or `invalid`, is final. No fallback is asked.
-- When the context has ended, no fallback is asked.
-
-```go
-c := tin.New(aeat.New(cert), vies.New()) // AEAT for Spain; VIES confirms Spanish NIFs when AEAT is down
-```
-
 The client holds no cache, so every call reaches the register. The client is safe for concurrent use when its verifiers are.
 
 A single tax ID has its own method. It returns a check with an empty `Path`, because there is no party document to point into; its mismatch paths are relative to the tax ID, `/code` and `/country`. A tax ID that no verifier covers is a check with status `unsupported`, not an error:
@@ -114,7 +99,7 @@ type Verifier interface {
 
 A verifier whose answer depends on party data, and not only on the identifier, also implements `tin.PartyKeyer`. `PartyKey(req)` returns that data, normalized, or `""` when the answer depends on the identifier only. An application that stores answers adds it to its key, so that two requests with one identifier and different party data never share an answer. For example, AEAT returns the name of a natural person.
 
-`Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. Any other status, including empty, counts as the verifier failing to answer: the next verifier is asked, as for an error.
+`Answer` is only what the register knows: `Status` (`valid` or `invalid`), the `Record` when disclosed, the `TaxID` the register echoes, and `CheckedAt` (zero means now). The client builds the check around it: path, identifier, source, mismatches. A verifier returns an error only when the register cannot answer. An invalid identifier is an answer with status `invalid` and a nil error. Any other status, including empty, makes the check `unverified`.
 
 Document a new verifier in a README in its package, and add it to [Registers](#registers).
 

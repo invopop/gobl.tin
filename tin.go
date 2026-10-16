@@ -77,47 +77,30 @@ func (c *Client) SupportsTaxID(tid *tax.Identity) bool {
 	return c.verifierFor(fromTaxID(tid).Identifier) != nil
 }
 
-// The first verifier that supports the identifier decides: its valid or
-// invalid answer is final. Only when it cannot answer are the next ones
-// asked, and they can confirm but never reject, because a second register may
-// not hold a valid identifier (VIES lacks most Spanish NIFs). A fallback's
-// invalid answer is ignored, and the Check keeps the first verifier's failure.
+// Only the first verifier that supports the identifier is asked; when it
+// cannot answer, the Check is unverified.
 func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Check {
 	check := &Check{Path: id.Path, TaxID: id.taxID}
-	req := Request{Identifier: id.Identifier, Party: party}
-	verifiers := c.verifiersFor(id.Identifier)
-	if len(verifiers) == 0 {
+	v := c.verifierFor(id.Identifier)
+	if v == nil {
 		check.Status = StatusUnsupported
 		return check
 	}
-	for i, v := range verifiers {
-		if i > 0 && ctx.Err() != nil {
-			break
-		}
-		ans, err := ask(ctx, v, req)
-		if err != nil {
-			if i == 0 {
-				check.Source = v.Source()
-				check.fail(err)
-			}
-			continue
-		}
-		if i > 0 && ans.Status != StatusValid {
-			continue
-		}
-		check.Source = v.Source()
-		check.fail(nil)
-		check.Status = ans.Status
-		check.Record = ans.Record
-		check.Reason = ans.Reason
-		check.CheckedAt = ans.CheckedAt
-		if check.CheckedAt.IsZero() {
-			check.CheckedAt = time.Now().UTC()
-		}
-		if ans.TaxID != nil {
-			check.TaxID = normalizeTaxID(ans.TaxID)
-		}
+	check.Source = v.Source()
+	ans, err := ask(ctx, v, Request{Identifier: id.Identifier, Party: party})
+	if err != nil {
+		check.fail(err)
 		return check
+	}
+	check.Status = ans.Status
+	check.Record = ans.Record
+	check.Reason = ans.Reason
+	check.CheckedAt = ans.CheckedAt
+	if check.CheckedAt.IsZero() {
+		check.CheckedAt = time.Now().UTC()
+	}
+	if ans.TaxID != nil {
+		check.TaxID = normalizeTaxID(ans.TaxID)
 	}
 	return check
 }
@@ -135,16 +118,6 @@ func ask(ctx context.Context, v Verifier, req Request) (*Answer, error) {
 	default:
 		return ans, nil
 	}
-}
-
-func (c *Client) verifiersFor(id Identifier) []Verifier {
-	var out []Verifier
-	for _, v := range c.verifiers {
-		if v.Supports(id) {
-			out = append(out, v)
-		}
-	}
-	return out
 }
 
 func (c *Client) verifierFor(id Identifier) Verifier {
