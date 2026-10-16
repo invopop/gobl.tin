@@ -1,0 +1,53 @@
+package main
+
+import (
+	"crypto/tls"
+	"fmt"
+	"os"
+
+	tin "github.com/invopop/gobl.tin"
+	"github.com/invopop/gobl.tin/aeat"
+	"github.com/spf13/pflag"
+)
+
+// Environment variable with the AEAT certificate password.
+const envAEATPassword = "AEAT_CERT_PASSWORD"
+
+// Wires AEAT, when a certificate is given.
+type aeatRegister struct {
+	cert string
+	seal bool
+}
+
+func (r *aeatRegister) flags(fs *pflag.FlagSet) {
+	fs.StringVar(&r.cert, "aeat-cert", "", "PKCS#12 certificate for AEAT, which then verifies Spanish tax IDs; the password is read from "+envAEATPassword)
+	fs.BoolVar(&r.seal, "aeat-seal", false, "The AEAT certificate is a seal certificate")
+}
+
+func (r *aeatRegister) verifier() (tin.Verifier, error) {
+	if r.cert == "" {
+		return nil, nil
+	}
+	cert, err := loadCertificate(r.cert, os.Getenv(envAEATPassword))
+	if err != nil {
+		return nil, err
+	}
+	var opts []aeat.Option
+	if r.seal {
+		opts = append(opts, aeat.WithSeal())
+	}
+	return aeat.New(cert, opts...), nil
+}
+
+// Reads a PKCS#12 certificate file.
+func loadCertificate(path, password string) (tls.Certificate, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("reading AEAT certificate: %w", err)
+	}
+	cert, err := aeat.LoadCertificate(data, password)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("decoding AEAT certificate: %w", err)
+	}
+	return cert, nil
+}

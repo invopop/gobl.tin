@@ -285,7 +285,7 @@ func TestVerifyTransport(t *testing.T) {
 			a := New(WithBaseURL(bad))
 			_, err := a.Verify(context.Background(), tin.Request{Identifier: tid})
 			require.Error(t, err, bad)
-			assert.ErrorIs(t, err, tin.ErrInput, bad)
+			assert.ErrorIs(t, err, tin.ErrServer, bad)
 			assert.Contains(t, err.Error(), "invalid base URL", bad)
 		}
 	})

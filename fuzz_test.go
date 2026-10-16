@@ -6,14 +6,14 @@ import (
 	"unicode"
 )
 
-func FuzzNormalizeName(f *testing.F) {
-	for _, seed := range []string{"", "ACME GMBH", "A.C.M.E. GmbH", "Smith & Sons", "  Muñoz   SL ", "O’Brien-Ltd", "---"} {
+func FuzzNameKey(f *testing.F) {
+	for _, seed := range []string{"", "ACME GMBH", "A.C.M.E. GmbH", "Smith & Sons", "  Muñoz   SL ", "Telefónica, S.A.", "ǰ", "O’Brien-Ltd", "---"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		n := normalizeName(s)
-		if n != normalizeName(n) {
-			t.Fatalf("not idempotent: %q -> %q -> %q", s, n, normalizeName(n))
+		n := NameKey(s)
+		if n != NameKey(n) {
+			t.Fatalf("not idempotent: %q -> %q -> %q", s, n, NameKey(n))
 		}
 		if n != strings.TrimSpace(n) || strings.Contains(n, "  ") {
 			t.Fatalf("whitespace not folded: %q", n)

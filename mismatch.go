@@ -59,10 +59,10 @@ func taxIDMismatch(id identifier, check *Check) *Mismatch {
 
 // nameMismatch compares the party's name with the record's when both are
 // set. A record name with no letter or digit, such as a "---" placeholder,
-// is no name.
+// is no name. A name that the register confirmed is no mismatch.
 func nameMismatch(party *org.Party, rec *Record) *Mismatch {
 	name := strings.TrimSpace(rec.Name)
-	if party.Name == "" || !hasLetterOrDigit(name) || NameMatches(name, party.Name) {
+	if party.Name == "" || rec.NameConfirmed || !hasLetterOrDigit(name) || NameMatches(name, party.Name) {
 		return nil
 	}
 	return &Mismatch{Field: MismatchName, Path: PathName, Document: party.Name, Register: name}
