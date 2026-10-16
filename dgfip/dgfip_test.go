@@ -287,15 +287,16 @@ func TestNewInvalidBaseURL(t *testing.T) {
 	}
 }
 
-// TestClientFallsBackToVIES checks that a DGFiP failure lets the next
-// verifier answer, as Lookup orders them.
-func TestClientFallsBackToVIES(t *testing.T) {
+// TestClientNeverAsksVIES checks that a DGFiP failure is final, as Lookup
+// orders the verifiers: VIES is never asked for France.
+func TestClientNeverAsksVIES(t *testing.T) {
 	v, _, _ := setup(t, reply{status: http.StatusBadGateway, body: "down"}, reply{status: http.StatusOK, body: danoneCompany})
 	next := &fakeVIES{ans: &tin.Answer{Status: tin.StatusValid, Record: &tin.Record{Name: "SA DANONE"}}}
 	check, err := tin.New(v, next).VerifyTaxID(context.Background(), &taxIdentity)
 	require.NoError(t, err)
-	assert.Equal(t, tin.StatusValid, check.Status)
-	assert.Equal(t, vies.Source, check.Source)
+	assert.Equal(t, tin.StatusUnverified, check.Status)
+	assert.Equal(t, Source, check.Source)
+	assert.Equal(t, int32(0), next.calls.Load())
 }
 
 var taxIdentity = *taxID(danone)
