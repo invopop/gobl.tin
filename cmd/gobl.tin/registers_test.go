@@ -6,6 +6,7 @@ import (
 
 	tin "github.com/invopop/gobl.tin"
 	"github.com/invopop/gobl.tin/aeat"
+	"github.com/invopop/gobl.tin/dgfip"
 	"github.com/invopop/gobl.tin/vies"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
@@ -40,22 +41,24 @@ func TestBuildVerifiers(t *testing.T) {
 }
 
 func TestDefaultRegisters(t *testing.T) {
-	t.Run("VIES alone without an AEAT certificate", func(t *testing.T) {
+	t.Run("DGFiP before VIES without an AEAT certificate", func(t *testing.T) {
 		vs, err := buildVerifiers(defaultRegisters())
 		require.NoError(t, err)
-		require.Len(t, vs, 1)
-		assert.Equal(t, vies.Source, vs[0].Source())
+		require.Len(t, vs, 2)
+		assert.Equal(t, dgfip.Source, vs[0].Source())
+		assert.Equal(t, vies.Source, vs[1].Source())
 	})
 
-	t.Run("AEAT before VIES with a certificate", func(t *testing.T) {
+	t.Run("AEAT and DGFiP before VIES with a certificate", func(t *testing.T) {
 		t.Setenv(envAEATPassword, "secret")
 		path := writeCertificate(t, "secret")
 		vo := verify(&rootOpts{})
 		require.NoError(t, vo.cmd().Flags().Parse([]string{"--aeat-cert", path}))
 		vs, err := buildVerifiers(vo.registers)
 		require.NoError(t, err)
-		require.Len(t, vs, 2)
+		require.Len(t, vs, 3)
 		assert.Equal(t, aeat.Source, vs[0].Source())
-		assert.Equal(t, vies.Source, vs[1].Source())
+		assert.Equal(t, dgfip.Source, vs[1].Source())
+		assert.Equal(t, vies.Source, vs[2].Source())
 	})
 }

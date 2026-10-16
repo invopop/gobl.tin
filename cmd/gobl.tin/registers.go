@@ -15,7 +15,7 @@ type register interface {
 
 // Registers in routing order: national registers before VIES.
 func defaultRegisters() []register {
-	return []register{new(aeatRegister), new(viesRegister)}
+	return []register{new(aeatRegister), new(dgfipRegister), new(viesRegister)}
 }
 
 func buildVerifiers(registers []register) ([]tin.Verifier, error) {

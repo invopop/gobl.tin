@@ -24,6 +24,7 @@ Each register has its own package and README:
 |---|---|---|
 | [`vies`](vies/README.md) | VIES, the European Commission | EU VAT numbers |
 | [`aeat`](aeat/README.md) | AEAT census, Spain | Spanish NIFs |
+| [`dgfip`](dgfip/README.md) | DGFiP open data and Sirene, France | French VAT numbers |
 
 ## Go package
 
@@ -129,7 +130,7 @@ Every path is a JSON Pointer relative to the party document. A consumer that pat
 
 ### Record status
 
-`Record.Status` is the standing of the party in its register: `active`, `inactive`, `dissolved` or `revoked`. `revoked` means that the authority that issued the identifier revoked it: the register still identifies the party, but the identifier has no legal effect. Verifiers map register values onto this vocabulary and leave it empty for values they do not know. It does not change the check status: a recognised but dissolved company is `valid` with `Record.Status` `dissolved`, and the consumer decides.
+`Record.Status` is the standing of the party in its register: `active`, `inactive`, `dissolved`, `revoked` or `not-vat-registered`. `revoked` means that the authority that issued the identifier revoked it: the register still identifies the party, but the identifier has no legal effect. `not-vat-registered` means that the party is active, but has no VAT registration, such as a French business under the franchise en base. Verifiers map register values onto this vocabulary and leave it empty for values they do not know. It does not change the check status: a recognised but dissolved company is `valid` with `Record.Status` `dissolved`, and the consumer decides.
 
 ## Patch
 

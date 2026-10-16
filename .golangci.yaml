@@ -11,6 +11,10 @@ linters:
   settings:
     goconst:
       ignore-tests: true
+    misspell:
+      # French field names of the Annuaire des Entreprises API.
+      ignore-rules:
+        - individuel
   exclusions:
     generated: lax
     paths:
