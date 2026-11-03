@@ -145,6 +145,46 @@ func TestParseAddressNL(t *testing.T) {
 	}
 }
 
+// Company addresses from VIES (2026-10-22), plus made-up lines.
+func TestParseAddressPL(t *testing.T) {
+	pl := func(street, num, extra, code, locality string) *org.Address {
+		return &org.Address{Street: street, Number: num, StreetExtra: extra, Code: cbc.Code(code), Locality: locality, Country: "PL"}
+	}
+	tests := []struct {
+		name string
+		raw  string
+		want *org.Address
+	}{
+		{"street and number", "BONIFRATERSKA 17\n00-203 WARSZAWA", pl("BONIFRATERSKA", "17", "", "00-203", "WARSZAWA")},
+		{"number with a letter", "MATUSZEWSKA 14C\n03-876 WARSZAWA", pl("MATUSZEWSKA", "14C", "", "03-876", "WARSZAWA")},
+		{"two numbers", "ŻEGAŃSKA 21/23\n04-713 WARSZAWA", pl("ŻEGAŃSKA", "21/23", "", "04-713", "WARSZAWA")},
+		{"flat", "AL. ZWYCIĘSTWA 241/13 M4\n81-521 GDYNIA", pl("AL. ZWYCIĘSTWA", "241/13", "M4", "81-521", "GDYNIA")},
+		{"flat with a dot", "DOMANIEWSKA 37 M2.43\n02-672 WARSZAWA", pl("DOMANIEWSKA", "37", "M2.43", "02-672", "WARSZAWA")},
+		{"quotes in the street", "ALEJA \"SOLIDARNOŚCI\" 117 M207\n00-140 WARSZAWA", pl(`ALEJA "SOLIDARNOŚCI"`, "117", "M207", "00-140", "WARSZAWA")},
+		{"post town of two words", "SANDOMIERSKA 26A M116\n27-400 OSTROWIEC ŚWIĘTOKRZYSKI", pl("SANDOMIERSKA", "26A", "M116", "27-400", "OSTROWIEC ŚWIĘTOKRZYSKI")},
+		{"village with a post town", "NIEKANIN \nSZMARAGDOWA 3\n78-100 KOŁOBRZEG", pl("SZMARAGDOWA", "3", "NIEKANIN", "78-100", "KOŁOBRZEG")},
+		{"village, flat and post town", "LATCHORZEW \nWARSZAWSKA 42/44 M21\n05-082 STARE BABICE", pl("WARSZAWSKA", "42/44", "M21, LATCHORZEW", "05-082", "STARE BABICE")},
+		{"town without a post town", "SOSNOWIEC \nOSTROGÓRSKA 43\n41-200 ", pl("OSTROGÓRSKA", "43", "", "41-200", "SOSNOWIEC")},
+		{"town equal to the post town", "GDAŃSK\nDŁUGA 75/76\n80-831 GDAŃSK", pl("DŁUGA", "75/76", "", "80-831", "GDAŃSK")},
+		{"number at the start of the street", "3 MAJA 5\n00-001 WARSZAWA", pl("3 MAJA", "5", "", "00-001", "WARSZAWA")},
+		{"number after an abbreviation", "AL. 3 MAJA 5\n00-001 WARSZAWA", pl("AL. 3 MAJA", "5", "", "00-001", "WARSZAWA")},
+		{"no town", "OSTRÓWEK 82\n21-013 ", nil},
+		{"unknown number", "SUCHA 1-3/2.L M018R\n50-186 WROCŁAW", nil},
+		{"text after the number", "SUCHA 1 LOKAL 5\n50-186 WROCŁAW", nil},
+		{"no number", "SUCHA\n50-186 WROCŁAW", nil},
+		{"foreign address", "GETAFE \nMIGUEL FARADAY 1\n28906 \nHISZPANIA", nil},
+		{"foreign postcode", "STATIONSTRAAT 40\n6515AB NIJMEGEN\nNIDERLANDY (HOLANDIA)", nil},
+		{"town line with a number", "PARK 3\nSUCHA 1\n50-186 WROCŁAW", nil},
+		{"masked", "---", nil},
+		{"empty", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseAddress("PL", tt.raw))
+		})
+	}
+}
+
 func TestParseAddressWithoutParser(t *testing.T) {
 	assert.Nil(t, parseAddress("DE", "MUSTERSTR. 1\n10115 BERLIN"), "a member state without a parser gives no address")
 	assert.Nil(t, parseAddress("FR", "59 RUE LA FAYETTE\n75009 PARIS"), "France has no parser")
