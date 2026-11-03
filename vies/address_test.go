@@ -107,6 +107,44 @@ func TestParseAddressBG(t *testing.T) {
 	}
 }
 
+// Company addresses from VIES (2026-10-22), plus made-up lines.
+func TestParseAddressNL(t *testing.T) {
+	nl := func(street, num, extra, code, locality string) *org.Address {
+		return &org.Address{Street: street, Number: num, StreetExtra: extra, Code: cbc.Code(code), Locality: locality, Country: "NL"}
+	}
+	tests := []struct {
+		name string
+		raw  string
+		want *org.Address
+	}{
+		{"street and number", "\nDISTRIBUTIEWEG 00058\n2645EJ DELFGAUW\n", nl("DISTRIBUTIEWEG", "58", "", "2645EJ", "DELFGAUW")},
+		{"street of several words", "\nBARUCH SPINOZASTRAAT 00010\n7442PD NIJVERDAL\n", nl("BARUCH SPINOZASTRAAT", "10", "", "7442PD", "NIJVERDAL")},
+		{"number without padding", "\nKERKENBOS 01077 Q\n6546BB NIJMEGEN\n", nl("KERKENBOS", "1077 Q", "", "6546BB", "NIJMEGEN")},
+		{"letter addition", "\nZEKERINGSTRAAT 00039 C\n1014BV AMSTERDAM\n", nl("ZEKERINGSTRAAT", "39 C", "", "1014BV", "AMSTERDAM")},
+		{"addition with a hyphen", "\nMOLENSTRAAT 00017 A-1\n4881CP ZUNDERT\n", nl("MOLENSTRAAT", "17 A-1", "", "4881CP", "ZUNDERT")},
+		{"number addition", "\nORANJESTRAAT 00008 14\n3111AP SCHIEDAM\n", nl("ORANJESTRAAT", "8 14", "", "3111AP", "SCHIEDAM")},
+		{"unit", "\nSMEDERIJSTRAAT 00002 UNIT S. 2.07\n4814DB BREDA\n", nl("SMEDERIJSTRAAT", "2", "UNIT S. 2.07", "4814DB", "BREDA")},
+		{"floor", "\nZEEBURGERDIJK 00490 3E VERD F\n1095AL AMSTERDAM\n", nl("ZEEBURGERDIJK", "490", "3E VERD F", "1095AL", "AMSTERDAM")},
+		{"building name", "\nHOOGOORDDREEF 00060 CENTERP. 1\n1101BE AMSTERDAM\n", nl("HOOGOORDDREEF", "60", "CENTERP. 1", "1101BE", "AMSTERDAM")},
+		{"place with an apostrophe", "\nLN COPES VAN CATTENBURCH 00046 C\n2585GB 'S-GRAVENHAGE\n", nl("LN COPES VAN CATTENBURCH", "46 C", "", "2585GB", "'S-GRAVENHAGE")},
+		{"place with a province", "\nKORNEDIJK 00007 A\n4116CE BUREN GLD\n", nl("KORNEDIJK", "7 A", "", "4116CE", "BUREN GLD")},
+		{"shielded address", "\nADRES AFGESCHERMD ART 00051\nLID 3 HANDELSREG.BESLUIT\n", nil},
+		{"shielded address with a postcode", "ADRES AFGESCHERMD 00051\n1013HJ AMSTERDAM", nil},
+		{"care-of line", "WS AB T/O 260\nBROUWERSGRACHT 00001\n1013HJ AMSTERDAM\n", nil},
+		{"number zero", "BROUWERSGRACHT 00000\n1013HJ AMSTERDAM", nil},
+		{"foreign address", "SLINGERWEG 4\nB3600 GENK BELGIE\nBELGIE\n", nil},
+		{"number not padded", "BROUWERSGRACHT 12\n1013HJ AMSTERDAM", nil},
+		{"postcode with a space", "BROUWERSGRACHT 00012\n1013 HJ AMSTERDAM", nil},
+		{"masked", "---", nil},
+		{"empty", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseAddress("NL", tt.raw))
+		})
+	}
+}
+
 func TestParseAddressWithoutParser(t *testing.T) {
 	assert.Nil(t, parseAddress("DE", "MUSTERSTR. 1\n10115 BERLIN"), "a member state without a parser gives no address")
 	assert.Nil(t, parseAddress("FR", "59 RUE LA FAYETTE\n75009 PARIS"), "France has no parser")
