@@ -29,7 +29,10 @@ var (
 // The province goes to Region. The labels of the block, entrance, floor, flat
 // and office stay in StreetExtra, as the register writes them.
 func parseAddressBG(lines []string) *org.Address {
-	m := bgTail.FindStringSubmatch(strings.Join(lines, " "))
+	if len(lines) != 1 {
+		return nil
+	}
+	m := bgTail.FindStringSubmatch(lines[0])
 	if m == nil || m[1] == "" {
 		return nil
 	}
