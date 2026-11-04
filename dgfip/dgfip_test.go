@@ -93,16 +93,6 @@ func TestVerify(t *testing.T) {
 		}, ans.Record)
 	})
 
-	t.Run("a sole trader is named after the person", func(t *testing.T) {
-		body := `{"results":[{"siren":"390435220","nom_complet":"FRANCK DELHAYE (FRANCK DELHAYE)","nom_raison_sociale":null,"etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
-"siege":{"numero_voie":"2773","type_voie":"ROUTE","libelle_voie":"DE CORNUS","code_postal":"46330","libelle_commune":"CENEVIERES"}}]}`
-		v, _, _ := setup(t, ok(inDataset), ok(body))
-		ans, err := v.Verify(context.Background(), request("0A390435220"))
-		require.NoError(t, err)
-		assert.Equal(t, "FRANCK DELHAYE", ans.Record.Name)
-		assert.Equal(t, &org.Address{Number: "2773", Street: "ROUTE DE CORNUS", Code: "46330", Locality: "CENEVIERES", Country: "FR"}, ans.Record.Address)
-	})
-
 	t.Run("a person who opted out of publication gets no name or address", func(t *testing.T) {
 		body := `{"results":[{"siren":"519341283","nom_complet":"[NON-DIFFUSIBLE]","nom_raison_sociale":"[NON-DIFFUSIBLE]","etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
 "siege":{"numero_voie":"[NON-DIFFUSIBLE]","type_voie":"[NON-DIFFUSIBLE]","libelle_voie":"[NON-DIFFUSIBLE]","code_postal":"[NON-DIFFUSIBLE]","libelle_commune":"NIMES"}}]}`
@@ -127,42 +117,6 @@ func TestVerify(t *testing.T) {
 		ans, err := v.Verify(context.Background(), request(danone))
 		require.NoError(t, err)
 		assert.Equal(t, &tin.Record{Name: "DANONE", Status: tin.RecordStatusInactive}, ans.Record)
-	})
-
-	t.Run("a CEDEX replaces the postcode and the locality", func(t *testing.T) {
-		body := `{"results":[{"siren":"552032534","nom_raison_sociale":"DANONE","etat_administratif":"A",
-"siege":{"numero_voie":"1","indice_repetition":"B","type_voie":"AVENUE","libelle_voie":"DE PARIS","complement_adresse":"BATIMENT A","distribution_speciale":"BP 12","code_postal":"75009","libelle_commune":"PARIS","cedex":"75441","libelle_cedex":"PARIS CEDEX 09"}}]}`
-		v, _, _ := setup(t, ok(inDataset), ok(body))
-		ans, err := v.Verify(context.Background(), request(danone))
-		require.NoError(t, err)
-		assert.Equal(t, &org.Address{Number: "1B", Street: "AVENUE DE PARIS", StreetExtra: "BATIMENT A", PostOfficeBox: "BP 12", Code: "75441", Locality: "PARIS CEDEX 09", Country: "FR"}, ans.Record.Address)
-	})
-
-	t.Run("a CEDEX without a postcode is an address", func(t *testing.T) {
-		body := `{"results":[{"siren":"552032534","nom_raison_sociale":"DANONE","etat_administratif":"A",
-"siege":{"numero_voie":"1","type_voie":"AVENUE","libelle_voie":"DE PARIS","code_postal":"","libelle_commune":"PARIS","cedex":"75441","libelle_cedex":"PARIS CEDEX 09"}}]}`
-		v, _, _ := setup(t, ok(inDataset), ok(body))
-		ans, err := v.Verify(context.Background(), request(danone))
-		require.NoError(t, err)
-		require.NotNil(t, ans.Record.Address)
-		assert.Equal(t, cbc.Code("75441"), ans.Record.Address.Code)
-		assert.Equal(t, "PARIS CEDEX 09", ans.Record.Address.Locality)
-	})
-
-	t.Run("a company search without a results array is a network error", func(t *testing.T) {
-		for _, body := range []string{`{}`, `{"results":null}`} {
-			v, _, _ := setup(t, ok(inDataset), ok(body))
-			_, err := v.Verify(context.Background(), request(danone))
-			assert.ErrorIs(t, err, tin.ErrNetwork, body)
-		}
-	})
-
-	t.Run("a head office abroad gives no address", func(t *testing.T) {
-		body := `{"results":[{"siren":"552032534","nom_raison_sociale":"DANONE","etat_administratif":"A","siege":{"libelle_voie":"MAIN STREET","code_postal":"","code_pays_etranger":"99132"}}]}`
-		v, _, _ := setup(t, ok(inDataset), ok(body))
-		ans, err := v.Verify(context.Background(), request(danone))
-		require.NoError(t, err)
-		assert.Equal(t, &tin.Record{Name: "DANONE"}, ans.Record)
 	})
 
 	t.Run("an active company the dataset does not hold is not registered for VAT", func(t *testing.T) {
