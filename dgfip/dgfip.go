@@ -18,9 +18,9 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	tin "github.com/invopop/gobl.tin"
+	"github.com/invopop/gobl.tin/sirene"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
-	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/tax"
 )
 
@@ -33,9 +33,9 @@ const Source cbc.Key = "dgfip"
 // and is updated on working days.
 const DefaultDatasetURL = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/numeros-de-tva-intracommunautaires-francais"
 
-// DefaultCompaniesURL is the API of the Annuaire des Entreprises (API
-// Recherche d'entreprises), which gives the Sirene name and address.
-const DefaultCompaniesURL = "https://recherche-entreprises.api.gouv.fr"
+// DefaultCompaniesURL is the API of the Annuaire des Entreprises, which gives
+// the Sirene name and address.
+const DefaultCompaniesURL = sirene.DefaultURL
 
 // DefaultTimeout bounds a single API call.
 const DefaultTimeout = 15 * time.Second
@@ -46,10 +46,6 @@ const userAgent = "gobl.tin (+https://github.com/invopop/gobl.tin)"
 // defaultRetryAfter is used when a service rate limits without saying when
 // to retry.
 const defaultRetryAfter = time.Minute
-
-// notDisclosed is the value the Annuaire des Entreprises gives to every field
-// of a person or establishment that opted out of publication in Sirene.
-const notDisclosed = "[NON-DIFFUSIBLE]"
 
 // vatCode is a French VAT number without the country: a two character key
 // and the SIREN. It also keeps user input out of the dataset query.
@@ -62,7 +58,7 @@ type Verifier struct {
 	timeout      time.Duration
 	http         *http.Client
 	dataset      *resty.Client
-	companies    *resty.Client
+	companies    *sirene.Verifier
 
 	// initErr records an invalid construction, such as an unparseable base
 	// URL. Verify returns it, so a misconfiguration surfaces on the first call.
@@ -119,7 +115,11 @@ func New(opts ...Option) *Verifier {
 		}
 	}
 	v.dataset = v.client(v.datasetURL)
-	v.companies = v.client(v.companiesURL)
+	sopts := []sirene.Option{sirene.WithURL(v.companiesURL), sirene.WithTimeout(v.timeout)}
+	if v.http != nil {
+		sopts = append(sopts, sirene.WithHTTPClient(v.http))
+	}
+	v.companies = sirene.New(sopts...)
 	return v
 }
 
@@ -184,16 +184,16 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if !found && code.String()[:2] != sirenKey(siren) {
 		return &tin.Answer{Status: tin.StatusInvalid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}, nil
 	}
-	c, err := v.company(ctx, siren)
+	c, err := v.companies.Company(ctx, siren)
 	if err != nil {
 		return nil, err
 	}
 	ans := &tin.Answer{Status: tin.StatusValid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}
 	switch {
 	case found:
-		ans.Record = c.record()
-	case c != nil && c.AdminStatus == "A":
-		ans.Record = c.record()
+		ans.Record = record(c)
+	case c != nil && c.Active:
+		ans.Record = record(c)
 		if ans.Record == nil {
 			ans.Record = new(tin.Record)
 		}
@@ -243,128 +243,20 @@ func (v *Verifier) inDataset(ctx context.Context, code cbc.Code) (bool, error) {
 	return *out.TotalCount > 0, nil
 }
 
-// companiesResponse is the answer of the Annuaire des Entreprises search.
-type companiesResponse struct {
-	// Nil when the response has no results array.
-	Results *[]company `json:"results"`
-}
-
-type company struct {
-	SIREN       string `json:"siren"`
-	FullName    string `json:"nom_complet"`
-	LegalName   string `json:"nom_raison_sociale"`
-	AdminStatus string `json:"etat_administratif"`
-	Complements struct {
-		SoleTrader bool `json:"est_entrepreneur_individuel"`
-	} `json:"complements"`
-	HeadOffice establishment `json:"siege"`
-}
-
-type establishment struct {
-	Number          string `json:"numero_voie"`
-	Repetition      string `json:"indice_repetition"`
-	StreetType      string `json:"type_voie"`
-	StreetName      string `json:"libelle_voie"`
-	Complement      string `json:"complement_adresse"`
-	SpecialDelivery string `json:"distribution_speciale"`
-	PostCode        string `json:"code_postal"`
-	Locality        string `json:"libelle_commune"`
-	Cedex           string `json:"cedex"`
-	CedexLocality   string `json:"libelle_cedex"`
-	ForeignCountry  string `json:"code_pays_etranger"`
-}
-
-// company returns the company with the SIREN, or nil when the Annuaire des
-// Entreprises does not list it.
-func (v *Verifier) company(ctx context.Context, siren string) (*company, error) {
-	resp, err := v.companies.R().
-		SetContext(ctx).
-		SetQueryParams(map[string]string{"q": siren, "per_page": "5"}).
-		Get("/search")
-	if err != nil {
-		return nil, tin.ErrNetwork.WithCause(err)
-	}
-	if !resp.IsSuccess() {
-		return nil, statusError(resp, "company search")
-	}
-	out := new(companiesResponse)
-	if err := json.Unmarshal(resp.Body(), out); err != nil || out.Results == nil {
-		return nil, tin.ErrNetwork.WithCode(strconv.Itoa(resp.StatusCode())).WithMessage("decoding company response").WithCause(err)
-	}
-	for i := range *out.Results {
-		if c := &(*out.Results)[i]; c.SIREN == siren {
-			return c, nil
-		}
-	}
-	return nil, nil
-}
-
-// record maps the company onto a record, or nil for no company. Fields that
-// Sirene does not publish are left empty, so a person who opted out gets no
-// name or address.
-func (c *company) record() *tin.Record {
+// record maps the company onto a record, or nil for no company or nothing
+// disclosed. A company closed in Sirene is inactive.
+func record(c *sirene.Company) *tin.Record {
 	if c == nil {
 		return nil
 	}
-	rec := &tin.Record{Name: c.name(), Address: c.HeadOffice.address()}
-	if c.AdminStatus == "C" {
+	rec := &tin.Record{Name: c.Name, Address: c.Address}
+	if !c.Active {
 		rec.Status = tin.RecordStatusInactive
 	}
 	if rec.Name == "" && rec.Address == nil && rec.Status == "" {
 		return nil
 	}
 	return rec
-}
-
-// name is the legal name of a company. A sole trader has none, so the name
-// of the person is the full name up to the brackets, which hold a usage or
-// trade name: "FRANCK DELHAYE (FRANCK DELHAYE)" gives "FRANCK DELHAYE".
-func (c *company) name() string {
-	if c.Complements.SoleTrader || c.LegalName == "" {
-		name, _, _ := strings.Cut(c.FullName, " (")
-		return disclosed(name)
-	}
-	return disclosed(c.LegalName)
-}
-
-// address maps the head office onto a GOBL address. It gives no address for
-// an establishment abroad, without a postcode or CEDEX, or with an undisclosed
-// field.
-func (e *establishment) address() *org.Address {
-	fields := []string{e.Number, e.Repetition, e.StreetType, e.StreetName, e.Complement, e.SpecialDelivery, e.PostCode, e.Locality, e.Cedex, e.CedexLocality}
-	for _, f := range fields {
-		if strings.TrimSpace(f) == notDisclosed {
-			return nil
-		}
-	}
-	if e.ForeignCountry != "" || strings.TrimSpace(e.PostCode+e.Cedex) == "" {
-		return nil
-	}
-	out := &org.Address{
-		Number:        strings.TrimSpace(e.Number + e.Repetition),
-		Street:        strings.Join(strings.Fields(e.StreetType+" "+e.StreetName), " "),
-		StreetExtra:   strings.TrimSpace(e.Complement),
-		PostOfficeBox: strings.TrimSpace(e.SpecialDelivery),
-		Code:          cbc.Code(strings.TrimSpace(e.PostCode)),
-		Locality:      strings.TrimSpace(e.Locality),
-		Country:       l10n.ISOCountryCode("FR"),
-	}
-	if c := strings.TrimSpace(e.Cedex); c != "" {
-		// A CEDEX code replaces the postcode for mail to large senders.
-		out.Code = cbc.Code(c)
-		if l := strings.TrimSpace(e.CedexLocality); l != "" {
-			out.Locality = l
-		}
-	}
-	return out
-}
-
-func disclosed(s string) string {
-	s = strings.TrimSpace(s)
-	if s == notDisclosed {
-		return ""
-	}
-	return s
 }
 
 // statusError maps a non-2xx response onto the tin error taxonomy. The
