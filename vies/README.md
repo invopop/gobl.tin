@@ -34,6 +34,7 @@ The Bulgarian text stays in Cyrillic. The labelled details stay in `street_extra
 
 - the postcode is absent. Old records with unlabelled number groups, such as `УЛ.ВЕНЕЦ 028 01 04 007`, have no postcode, and their address can be out of date.
 - text without a label follows the details, or the street part has a comma or two words without a space between them.
+- a number inside the street name hides the house number, as in `бул. ВИТОША 2 В.ТЪРНОВО`. An ordinal (`8-ми`) and the number of a housing estate (`жк МЛАДОСТ 2`) are part of the name.
 
 The Dutch parser drops the padding zeros of the house number. A short addition (`C`, `A-1`, `14`) stays with the number; longer details, such as `UNIT C.2.17`, go to `street_extra`. A shielded address (`ADRES AFGESCHERMD`), a foreign address and house number `00000` give no address. The postcode stays as the register writes it, without a space.
 

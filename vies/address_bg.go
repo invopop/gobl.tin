@@ -24,6 +24,11 @@ var (
 	bgBareNumber   = regexp.MustCompile(`^((?i:ул|бул|пл)\. ?.+) (\d+[А-Яа-я]?|\d+-[А-Я])$`)
 	// Two words without a space: "БАДЕМАкомплекс", "местностГрахорлива".
 	bgGlued = regexp.MustCompile(`[а-я][А-Я]|[А-Я]{2}[а-я]`)
+	// A number inside the street name, as in "бул. ВИТОША 2 В.ТЪРНОВО", hides
+	// the house number. An ordinal ("8-ми") is part of the name, and so is the
+	// number of a housing estate ("жк МЛАДОСТ 2").
+	bgNumberInName = regexp.MustCompile(`(?:^| )\d+[А-Яа-я]?(?:-[А-Я])? `)
+	bgEstate       = regexp.MustCompile(`^(?:жк|кв\.)`)
 )
 
 // The province goes to Region. The labels of the block, entrance, floor, flat
@@ -52,6 +57,9 @@ func parseAddressBG(lines []string) *org.Address {
 		if b := bgBareNumber.FindStringSubmatch(street); b != nil {
 			street, num = b[1], b[2]
 		}
+	}
+	if !bgEstate.MatchString(street) && bgNumberInName.MatchString(street) {
+		return nil
 	}
 	if estate != "" {
 		extra = append([]string{estate}, extra...)
