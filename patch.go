@@ -107,14 +107,14 @@ func patchAddresses(party *org.Party, report *Report) []*org.Address {
 }
 
 // validRecords lists the records behind valid checks of the party's own tax
-// ID, in report order. A check's tax ID is the one the register echoed, so a
-// check for another tax ID, because the register answered for another one or
-// the report belongs to another party, describes another party and never
-// feeds the patch.
+// ID or identities, in report order. A check's tax ID is the one the register
+// echoed, so a check for another tax ID, because the register answered for
+// another one or the report belongs to another party, describes another party
+// and never feeds the patch. The same holds for an identity.
 func validRecords(party *org.Party, report *Report) []*Record {
 	var out []*Record
 	for _, c := range report.Checks {
-		if c != nil && c.Status == StatusValid && c.Record != nil && sameTaxID(c.TaxID, party.TaxID) {
+		if c != nil && c.Status == StatusValid && c.Record != nil && (sameTaxID(c.TaxID, party.TaxID) || sameIdentity(c.Identity, party)) {
 			out = append(out, c.Record)
 		}
 	}

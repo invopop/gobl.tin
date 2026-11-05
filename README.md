@@ -7,7 +7,7 @@ Copyright [Invopop Ltd.](https://invopop.com) 2026. Released publicly under the 
 ## Vocabulary
 
 - A **party** is a GOBL `org.Party`.
-- An **identifier** is the party's `tax_id`. Entries of `identities` are not checked.
+- An **identifier** is the party's `tax_id`, or an entry of `identities` with a type that a verifier covers, such as a French `SIREN`.
 - A **verifier** is one register client. See [Registers](#registers) for the built-in ones.
 - A **register** is the external authority a verifier asks, for example VIES or the AEAT census.
 - A **check** is the outcome for one identifier.
@@ -25,12 +25,13 @@ Each register has its own package and README:
 | [`vies`](vies/README.md) | VIES, the European Commission | EU VAT numbers |
 | [`aeat`](aeat/README.md) | AEAT census, Spain | Spanish NIFs |
 | [`dgfip`](dgfip/README.md) | DGFiP open data and Sirene, France | French VAT numbers |
+| [`sirene`](sirene/README.md) | Sirene, France | `SIREN` identities |
 
 ## Go package
 
 ### Verify a party
 
-`tin.New` takes an ordered list of verifiers. For the `tax_id` of a party, only the first verifier that supports it is asked. When it cannot answer, the check is `unverified` and has its failure; no other verifier is asked. `Client.Verify` returns an error only for a nil party.
+`tin.New` takes an ordered list of verifiers. For each identifier of a party, only the first verifier that supports it is asked. When it cannot answer, the check is `unverified` and has its failure; no other verifier is asked. `Client.Verify` returns an error only for a nil party.
 
 ```go
 package main
@@ -96,7 +97,9 @@ type Verifier interface {
 }
 ```
 
-`Identifier` describes the identifier: its path in the party, its country and its normalized code. `Supports` routes on it alone. `Request` is what `Verify` receives: the `Identifier` and the `Party` it belongs to, as read-only context for registers that need more than the code, such as a name. `Party` is nil for `VerifyTaxID`; a verifier that needs it returns `ErrInput`. Consumers never construct either; the client builds them from GOBL types.
+`Identifier` describes the identifier: its path in the party, its type, its country and its normalized code. The type is empty for a tax ID and holds the identity type, such as `SIREN`, for an entry of `identities`. `Supports` routes on it alone. `Request` is what `Verify` receives: the `Identifier` and the `Party` it belongs to, as read-only context for registers that need more than the code, such as a name. `Party` is nil for `VerifyTaxID`; a verifier that needs it returns `ErrInput`. Consumers never construct either; the client builds them from GOBL types.
+
+A verifier that covers entries of `identities` also implements `tin.IdentityVerifier`. `IdentityTypes()` lists the identity types it covers, for example `SIREN`. The client offers an identity only to such a verifier, and only when it lists the identity's type, so a verifier that knows only tax IDs never sees an identity. A party may hold identities that no verifier covers; they get no check.
 
 A verifier whose answer depends on party data, and not only on the identifier, also implements `tin.PartyKeyer`. `PartyKey(req)` returns that data, normalized, or `""` when the answer depends on the identifier only. An application that stores answers adds it to its key, so that two requests with one identifier and different party data never share an answer. For example, AEAT returns the name of a natural person.
 
@@ -108,10 +111,11 @@ To use a new verifier in the command line, add a `register` in its own file unde
 
 ## Report
 
-A report has one check per identifier: the `tax_id`. A tax ID whose code is empty after normalization gets no check, and the report is then empty. A check carries:
+A report has one check per identifier: the `tax_id` first, then each covered entry of `identities` in order. An identifier whose code is empty after normalization gets no check, and an identity without a type gets none either. The report is then empty when nothing is left. A check carries:
 
-- `path`: the JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) of the identifier in the party, `/tax_id`.
-- `tax_id`: the normalized tax ID, as the register echoes it.
+- `path`: the JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) of the identifier in the party, `/tax_id` or `/identities/<index>`.
+- `tax_id`: the normalized tax ID, as the register echoes it. Absent for an identity.
+- `identity`: the normalized identity, for an entry of `identities`: its type and its code without separators.
 - `status`: `valid`, `invalid`, `unsupported` or `unverified`.
 - `source`: the verifier that answered, for example `vies`. Empty when unsupported.
 - `checked_at`: when the register answered. Absent when unsupported or unverified.
@@ -120,7 +124,7 @@ A report has one check per identifier: the `tax_id`. A tax ID whose code is empt
 - `reason`: the register's reason for an `invalid` answer, when it gives one.
 - `failure`: the register failure message, only when the status is `unverified`. The Go error is available through `Check.Err()`.
 
-Every path is a JSON Pointer relative to the party document. A consumer that patches an invoice prefixes the party's location, `/customer` or `/supplier`. Go consumers match on the typed values, `Check.TaxID` and `Mismatch.Field`, rather than parsing paths; the pointer is for JSON consumers.
+Every path is a JSON Pointer relative to the party document. A consumer that patches an invoice prefixes the party's location, `/customer` or `/supplier`. Go consumers match on the typed values, `Check.TaxID`, `Check.Identity` and `Mismatch.Field`, rather than parsing paths; the pointer is for JSON consumers.
 
 ```json
 {"checks":[{"path":"/tax_id","tax_id":{"country":"IE","code":"6388047V"},"status":"valid","source":"vies","checked_at":"2026-09-25T09:06:48Z","record":{"name":"GOOGLE IRELAND LIMITED"},"mismatches":[{"field":"name","path":"/name","document":"Google Ireland","register":"GOOGLE IRELAND LIMITED"}]}]}
@@ -144,9 +148,9 @@ patch, err := tin.Patch(party, report)
 |---|---|---|
 | `name` | The register gives a name that is not exactly the party's | The register's name replaces the party's. A masked name (`---`) is no name, so it is never written. The comparison is exact, so a name that differs only by case is written although the report has no name mismatch, which folds case. |
 | `addresses` | The register gives a structured address that is not already the party's first | The registered address becomes the first address. When the party holds it further down, it moves to the front and nothing is dropped; otherwise it replaces the first address and the others stay. Addresses are compared by the fields that locate them, so a label alone is no address, and the same place under another label is not written again. A free-text address is never written. |
-| `tax_id` | Never | It is what was verified. |
+| `tax_id`, `identities` | Never | They are what was verified. |
 
-Checks are read in report order, and the first valid record that has a value for a field wins. Records behind `invalid`, `unverified` or `unsupported` checks are never read. A merge patch replaces arrays whole, so `addresses` always appears as the full array. Applied once, a patch leaves nothing to write: a second patch from the same register is `{}`.
+Checks are read in report order, and the first valid record that has a value for a field wins. Records behind `invalid`, `unverified` or `unsupported` checks are never read. A record is read only when its check is about the party's own `tax_id` or one of its own identities, by type and code; a report for another party writes nothing. A merge patch replaces arrays whole, so `addresses` always appears as the full array. Applied once, a patch leaves nothing to write: a second patch from the same register is `{}`.
 
 ## Errors
 
