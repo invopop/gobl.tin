@@ -38,7 +38,7 @@ The Bulgarian text stays in Cyrillic. The labelled details stay in `street_extra
 
 The Dutch parser drops the padding zeros of the house number. A short addition (`C`, `A-1`, `14`) stays with the number; longer details, such as `UNIT C.2.17`, go to `street_extra`. A shielded address (`ADRES AFGESCHERMD`), a PO box (`POSTBUS`), a foreign address and house number `00000` give no address. The postcode stays as the register writes it, without a space.
 
-The Polish flat (`M5`) stays with its label in `street_extra`. A village with a separate post town goes to `street_extra` and the post town to `locality`, as Polish post writes it. Without a post town, the first line is the `locality`. A foreign address, a village without a town, and a street name that hides the house number (`SUCHA 1 LOKAL 5`) give no address.
+The Polish flat (`M` and a digit, as in `M5` or `M2.43`) stays with its label in `street_extra`. A village with a separate post town goes to `street_extra` and the post town to `locality`, as Polish post writes it. Without a post town, the first line is the `locality`. A foreign address, a village without a town, and a street name that hides the house number (`SUCHA 1 LOKAL 5`, `SUCHA 1 MAGAZYN`) give no address.
 
 A member state without a parser gives no address. To add one, collect real VIES answers for it first, then add its parser and a table of those answers as tests.
 

@@ -13,7 +13,7 @@ import (
 // names the town or village when it differs from the post town, or when the
 // post town is absent: "NIEKANIN" / "SZMARAGDOWA 3" / "78-100 KOŁOBRZEG".
 var (
-	plStreetLine   = regexp.MustCompile(`^(.+?) (\d+[A-Z]?(?:[/-]\d+[A-Z]?)?)(?: (M[\dA-Z.]+))?$`)
+	plStreetLine   = regexp.MustCompile(`^(.+?) (\d+[A-Z]?(?:[/-]\d+[A-Z]?)?)(?: (M\d[\dA-Z.]*))?$`)
 	plPostcodeLine = regexp.MustCompile(`^(\d{2}-\d{3})(?: (.+))?$`)
 	plDigit        = regexp.MustCompile(`\d`)
 	// A number inside the street name, as in "SUCHA 1 LOKAL 5", hides the

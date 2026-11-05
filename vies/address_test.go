@@ -179,6 +179,7 @@ func TestParseAddressPL(t *testing.T) {
 		{"no town", "OSTRÓWEK 82\n21-013 ", nil},
 		{"unknown number", "SUCHA 1-3/2.L M018R\n50-186 WROCŁAW", nil},
 		{"text after the number", "SUCHA 1 LOKAL 5\n50-186 WROCŁAW", nil},
+		{"word starting with M after the number", "SUCHA 1 MAGAZYN\n50-186 WROCŁAW", nil},
 		{"no number", "SUCHA\n50-186 WROCŁAW", nil},
 		{"foreign address", "GETAFE \nMIGUEL FARADAY 1\n28906 \nHISZPANIA", nil},
 		{"foreign postcode", "STATIONSTRAAT 40\n6515AB NIJMEGEN\nNIDERLANDY (HOLANDIA)", nil},
