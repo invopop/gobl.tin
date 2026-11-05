@@ -137,6 +137,7 @@ func TestParseAddressNL(t *testing.T) {
 		{"place with a province", "\nKORNEDIJK 00007 A\n4116CE BUREN GLD\n", nl("KORNEDIJK", "7 A", "", "4116CE", "BUREN GLD")},
 		{"shielded address", "\nADRES AFGESCHERMD ART 00051\nLID 3 HANDELSREG.BESLUIT\n", nil},
 		{"shielded address with a postcode", "ADRES AFGESCHERMD 00051\n1013HJ AMSTERDAM", nil},
+		{"PO box", "POSTBUS 00123\n1013HJ AMSTERDAM", nil},
 		{"care-of line", "WS AB T/O 260\nBROUWERSGRACHT 00001\n1013HJ AMSTERDAM\n", nil},
 		{"number zero", "BROUWERSGRACHT 00000\n1013HJ AMSTERDAM", nil},
 		{"foreign address", "SLINGERWEG 4\nB3600 GENK BELGIE\nBELGIE\n", nil},
