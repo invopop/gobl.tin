@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	tin "github.com/invopop/gobl.tin"
@@ -97,7 +98,14 @@ func isPOBoxPT(street string) bool {
 
 func isHouseNumberPT(name string) bool {
 	words := strings.Fields(name)
-	if len(words) == 0 || !slices.Contains(ptStreetTypes, words[0]) || slices.Contains(ptRoads, words[len(words)-1]) {
+	if len(words) == 0 || !slices.Contains(ptStreetTypes, words[0]) {
+		return false
+	}
+	// "LT." is LT.
+	for i, w := range words {
+		words[i] = strings.TrimFunc(w, unicode.IsPunct)
+	}
+	if slices.Contains(ptRoads, words[len(words)-1]) {
 		return false
 	}
 	return !slices.ContainsFunc(words, func(w string) bool { return slices.Contains(ptOtherNumbers, w) })
