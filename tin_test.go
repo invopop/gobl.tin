@@ -427,3 +427,86 @@ func TestOnlyTheFirstVerifierIsAsked(t *testing.T) {
 		}
 	})
 }
+
+// identityVerifier is a fake verifier that also covers identity types.
+type identityVerifier struct {
+	fakeVerifier
+	types []cbc.Code
+}
+
+func (f *identityVerifier) IdentityTypes() []cbc.Code { return f.types }
+
+func TestVerifyIdentities(t *testing.T) {
+	ctx := context.Background()
+	siren := func() *identityVerifier {
+		return &identityVerifier{
+			fakeVerifier: fakeVerifier{
+				source:   "sirene",
+				supports: func(id Identifier) bool { return id.Type == "SIREN" },
+				checks:   map[cbc.Code]*Answer{"552032534": valid("sirene", &Record{Name: "DANONE"})},
+			},
+			types: []cbc.Code{"SIREN"},
+		}
+	}
+
+	t.Run("an identity goes to the verifier that lists its type", func(t *testing.T) {
+		dgfip := &fakeVerifier{source: "dgfip", supports: taxOnly("FR")}
+		ids := siren()
+		party := &org.Party{
+			Name:       "Danone SA",
+			TaxID:      &tax.Identity{Country: "FR", Code: "27552032534"},
+			Identities: []*org.Identity{{Type: "SIRET", Code: "55203253400646"}, {Type: "SIREN", Code: "552 032 534"}},
+		}
+		report, err := New(dgfip, ids).Verify(ctx, party)
+		require.NoError(t, err)
+		require.Len(t, report.Checks, 2, "the SIRET has no verifier and gets no check")
+		assert.Equal(t, PathTaxID, report.Checks[0].Path)
+		assert.Equal(t, cbc.Key("dgfip"), report.Checks[0].Source)
+
+		c := report.Checks[1]
+		assert.Equal(t, "/identities/1", c.Path)
+		assert.Equal(t, StatusValid, c.Status)
+		assert.Equal(t, cbc.Key("sirene"), c.Source)
+		assert.Nil(t, c.TaxID)
+		assert.Equal(t, &org.Identity{Type: "SIREN", Code: "552032534"}, c.Identity)
+		assert.Equal(t, []*Mismatch{{Field: MismatchName, Path: "/name", Document: "Danone SA", Register: "DANONE"}}, c.Mismatches)
+
+		require.Len(t, dgfip.calls, 1, "the tax ID verifier never sees an identity")
+		require.Len(t, ids.calls, 1)
+		assert.Equal(t, Identifier{Path: "/identities/1", Type: "SIREN", Code: "552032534"}, ids.calls[0].Identifier)
+		assert.Same(t, party, ids.calls[0].Party)
+	})
+
+	t.Run("a verifier without identity types never sees an identity", func(t *testing.T) {
+		all := &fakeVerifier{source: "vies"}
+		report, err := New(all).Verify(ctx, &org.Party{Identities: []*org.Identity{{Country: "FR", Type: "SIREN", Code: "552032534"}}})
+		require.NoError(t, err)
+		assert.Empty(t, report.Checks)
+		assert.Empty(t, all.calls)
+	})
+
+	t.Run("a party with only an identity", func(t *testing.T) {
+		report, err := New(siren()).Verify(ctx, &org.Party{Identities: []*org.Identity{{Type: "SIREN", Code: "552032534"}}})
+		require.NoError(t, err)
+		require.Len(t, report.Checks, 1)
+		assert.True(t, report.Valid())
+	})
+
+	t.Run("an identity check ignores a tax ID in the answer", func(t *testing.T) {
+		ids := siren()
+		ids.checks["552032534"].TaxID = &tax.Identity{Country: "FR", Code: "27552032534"}
+		report, err := New(ids).Verify(ctx, &org.Party{Identities: []*org.Identity{{Type: "SIREN", Code: "552032534"}}})
+		require.NoError(t, err)
+		require.Len(t, report.Checks, 1)
+		assert.Nil(t, report.Checks[0].TaxID)
+		assert.Empty(t, report.Checks[0].Mismatches)
+	})
+
+	t.Run("a verifier that lists the type may still decline", func(t *testing.T) {
+		ids := siren()
+		ids.supports = func(id Identifier) bool { return id.Type == "SIREN" && id.Country == "" }
+		report, err := New(ids).Verify(ctx, &org.Party{Identities: []*org.Identity{{Country: "BE", Type: "SIREN", Code: "552032534"}}})
+		require.NoError(t, err)
+		assert.Empty(t, report.Checks)
+	})
+}

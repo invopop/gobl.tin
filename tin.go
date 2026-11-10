@@ -5,6 +5,7 @@ package tin
 import (
 	"context"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/invopop/gobl/org"
@@ -40,13 +41,19 @@ func nilValue(v Verifier) bool {
 	}
 }
 
-// Verify checks the party's tax ID. It returns an error only for a nil party.
+// Verify checks the party's tax ID and the identities that a verifier
+// covers. It returns an error only for a nil party.
 func (c *Client) Verify(ctx context.Context, party *org.Party) (*Report, error) {
 	if party == nil {
 		return nil, ErrInput.WithMessage("no party provided")
 	}
 	report := &Report{Checks: []*Check{}}
 	for _, id := range walk(party) {
+		if id.identity != nil && c.verifierFor(id.Identifier) == nil {
+			// A party may hold any identity; only the covered ones are
+			// checked.
+			continue
+		}
 		check := c.check(ctx, id, party)
 		check.Mismatches = mismatches(party, id, check)
 		report.Checks = append(report.Checks, check)
@@ -80,7 +87,7 @@ func (c *Client) SupportsTaxID(tid *tax.Identity) bool {
 // Only the first verifier that supports the identifier is asked; when it
 // cannot answer, the Check is unverified.
 func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Check {
-	check := &Check{Path: id.Path, TaxID: id.taxID}
+	check := &Check{Path: id.Path, TaxID: id.taxID, Identity: id.identity}
 	v := c.verifierFor(id.Identifier)
 	if v == nil {
 		check.Status = StatusUnsupported
@@ -99,7 +106,8 @@ func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Ch
 	if check.CheckedAt.IsZero() {
 		check.CheckedAt = time.Now().UTC()
 	}
-	if ans.TaxID != nil {
+	// An identity has no tax ID, whatever the verifier echoes.
+	if ans.TaxID != nil && id.taxID != nil {
 		check.TaxID = normalizeTaxID(ans.TaxID)
 	}
 	return check
@@ -120,8 +128,16 @@ func ask(ctx context.Context, v Verifier, req Request) (*Answer, error) {
 	}
 }
 
+// A tax ID goes to any verifier; an identity only to a verifier that lists
+// its type.
 func (c *Client) verifierFor(id Identifier) Verifier {
 	for _, v := range c.verifiers {
+		if id.Type != "" {
+			iv, ok := v.(IdentityVerifier)
+			if !ok || !slices.Contains(iv.IdentityTypes(), id.Type) {
+				continue
+			}
+		}
 		if v.Supports(id) {
 			return v
 		}

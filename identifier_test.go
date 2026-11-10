@@ -26,16 +26,26 @@ func TestWalk(t *testing.T) {
 		assert.Empty(t, walk(&org.Party{TaxID: &tax.Identity{Country: "DE", Code: "DE"}}))
 	})
 
-	t.Run("identities are not walked", func(t *testing.T) {
+	t.Run("identities with a type and a code follow the tax id", func(t *testing.T) {
 		party := &org.Party{
-			TaxID:      &tax.Identity{Country: "DE", Code: "282741168"},
-			Identities: []*org.Identity{{Country: "DE", Type: "HRB", Code: "12345"}},
+			TaxID: &tax.Identity{Country: "DE", Code: "282741168"},
+			Identities: []*org.Identity{
+				{Country: "DE", Type: "HRB", Code: "12345"},
+				nil,
+				{Code: "no type"},
+				{Type: "SIREN"},
+				{Type: " siren ", Code: "552 032 534"},
+			},
 		}
 		ids := walk(party)
-		require.Len(t, ids, 1)
+		require.Len(t, ids, 3)
 		assert.Equal(t, "/tax_id", ids[0].Path)
 		assert.Equal(t, "DE", ids[0].Country.String())
 		assert.Equal(t, "282741168", ids[0].Code.String())
+		assert.Equal(t, Identifier{Path: "/identities/0", Type: "HRB", Country: "DE", Code: "12345"}, ids[1].Identifier)
+		assert.Equal(t, Identifier{Path: "/identities/4", Type: "SIREN", Code: "552032534"}, ids[2].Identifier)
+		assert.Nil(t, ids[2].taxID)
+		assert.Equal(t, "552 032 534", party.Identities[4].Code.String(), "the party is untouched")
 	})
 
 	t.Run("upper-cases a lower-case country", func(t *testing.T) {

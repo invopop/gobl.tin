@@ -24,6 +24,16 @@ type Verifier interface {
 	Verify(ctx context.Context, req Request) (*Answer, error)
 }
 
+// IdentityVerifier is a Verifier that also covers entries of identities. The
+// client offers an identity only to such a verifier, and only when it lists
+// the identity's type.
+type IdentityVerifier interface {
+	Verifier
+
+	// IdentityTypes lists the identity types it covers, for example "SIREN".
+	IdentityTypes() []cbc.Code
+}
+
 // PartyKeyer is a Verifier whose answer also depends on party data.
 type PartyKeyer interface {
 	// PartyKey returns that data, normalized, or "" when none is used.
@@ -75,8 +85,13 @@ type Check struct {
 	// JSON Pointer of the identifier in the party: "/tax_id".
 	Path string `json:"path,omitempty"`
 
-	// Normalized, as the register echoes it when it does.
+	// Normalized, as the register echoes it when it does. Nil for an
+	// identity.
 	TaxID *tax.Identity `json:"tax_id,omitempty"`
+
+	// Normalized copy of the identity, for a check of an entry of
+	// identities.
+	Identity *org.Identity `json:"identity,omitempty"`
 
 	Status Status `json:"status"`
 
@@ -137,9 +152,6 @@ const (
 	// The register identifies the party, but the identifier has no legal
 	// effect.
 	RecordStatusRevoked RecordStatus = "revoked"
-
-	// The party is active, but not registered for VAT.
-	RecordStatusNotVATRegistered RecordStatus = "not-vat-registered"
 )
 
 // MismatchField names the kind of party field a mismatch is about.
