@@ -22,8 +22,11 @@ const ptCut = 60
 var (
 	ptPostcodeLine = regexp.MustCompile(`^(\d{4}-\d{3}) (.+)$`)
 	// The number marker: "N 65", "Nº 101", "NUMERO 230".
-	ptNumbered     = regexp.MustCompile(`^(.+?),? (?:N|N\.|Nº|Nº\.|N\.º|N°|NUMERO|NÚMERO) (\d+[A-Z]?(?:-\d+[A-Z]?)?)(?:,? (.+))?$`)
-	ptLetter       = regexp.MustCompile(`^[A-Z]$`)
+	ptNumbered = regexp.MustCompile(`^(.+?),? (?:N|N\.|Nº|Nº\.|N\.º|N°|NUMERO|NÚMERO) (\d+[A-Z]?(?:-\d+[A-Z]?)?)(?:,? (.+))?$`)
+	ptLetter   = regexp.MustCompile(`^[A-Z]$`)
+	// A dash or a comma alone, as in "N 1 - 1 A". The dash in "-1 DTO" is the
+	// sign of a floor.
+	ptSeparator    = regexp.MustCompile(`^[-,] `)
 	ptBrackets     = regexp.MustCompile(`\(.*?\)`)
 	ptMunicipality = regexp.MustCompile(`^[A-Z]{3}$`)
 )
@@ -79,7 +82,7 @@ func parseAddressPT(raw string) *org.Address {
 	var extra []string
 	if n := ptNumbered.FindStringSubmatch(street); n != nil && isHouseNumberPT(n[1]) {
 		out.Street, out.Number = strings.TrimRight(n[1], " -,"), n[2]
-		if rest := strings.TrimLeft(n[3], " -,"); ptLetter.MatchString(rest) {
+		if rest := ptSeparator.ReplaceAllString(n[3], ""); ptLetter.MatchString(rest) {
 			out.Number += " " + rest
 		} else if rest != "" {
 			extra = append(extra, rest)
