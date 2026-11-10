@@ -194,6 +194,97 @@ func TestParseAddressPL(t *testing.T) {
 	}
 }
 
+// Company addresses from VIES (2026-11-10), plus made-up lines.
+func TestParseAddressAT(t *testing.T) {
+	at := func(street, num, code, locality string) *org.Address {
+		return &org.Address{Street: street, Number: num, Code: cbc.Code(code), Locality: locality, Country: "AT"}
+	}
+	tests := []struct {
+		name string
+		raw  string
+		want *org.Address
+	}{
+		{"street and number", "Innsbrucker Straße 75\nAT-6130 Schwaz", at("Innsbrucker Straße", "75", "6130", "Schwaz")},
+		{"number with a letter", "Feldkirchenstraße 30b\nAT-8401 Kalsdorf b.Graz", at("Feldkirchenstraße", "30b", "8401", "Kalsdorf b.Graz")},
+		{"letter after a space", "Siezenheimer Straße 29 A\nAT-5020 Salzburg", at("Siezenheimer Straße", "29 A", "5020", "Salzburg")},
+		{"number range", "Achenseestr. 1-3\nAT-6200 Jenbach", at("Achenseestr.", "1-3", "6200", "Jenbach")},
+		{"number range with spaces", "Wienerbergstraße 15 - 19\nAT-1100 Wien", at("Wienerbergstraße", "15 - 19", "1100", "Wien")},
+		{"stair and door", "Argentinierstraße 18/1/10\nAT-1040 Wien", at("Argentinierstraße", "18/1/10", "1040", "Wien")},
+		{"floor", "Strubergasse 28/5.OG\nAT-5020 Salzburg", at("Strubergasse", "28/5.OG", "5020", "Salzburg")},
+		{"labelled stair and floor", "Neue Stiftingtalstraße 2/Stiege B6/OG\nAT-8010 Graz", at("Neue Stiftingtalstraße", "2/Stiege B6/OG", "8010", "Graz")},
+		{"village without streets", "Anzing 33\nAT-4113 St.Martin/Mühlkreis", at("Anzing", "33", "4113", "St.Martin/Mühlkreis")},
+		{"street with hyphens", "Dr.-Auner-Straße 19/5\nAT-8074 Raaba-Grambach", at("Dr.-Auner-Straße", "19/5", "8074", "Raaba-Grambach")},
+		{"number in the street name", "IZ NÖ-Süd Str 3 Obj 16\nAT-2355 Wiener Neudorf", nil},
+		{"no number", "EVN-Platz .\nAT-2344 Maria Enzersdorf", nil},
+		{"building letter only", "Concorde Business Park F\nAT-2320 Schwechat", nil},
+		{"comma after the number", "Wagramerstr 19,IZD Tower\nAT-1220 Wien", nil},
+		{"PO box", "Postfach 123\nAT-1010 Wien", nil},
+		{"market stall", "Schwendermarkt Stand/18\nAT-1150 Wien", nil},
+		{"postcode without the country", "Innsbrucker Straße 75\n6130 Schwaz", nil},
+		{"three lines", "c/o Muster GmbH\nInnsbrucker Straße 75\nAT-6130 Schwaz", nil},
+		{"masked", "---", nil},
+		{"empty", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseAddress("AT", tt.raw))
+		})
+	}
+}
+
+// Company addresses from VIES (2026-11-10), plus made-up lines.
+func TestParseAddressPT(t *testing.T) {
+	pt := func(street, num, extra, code, locality string) *org.Address {
+		return &org.Address{Street: street, Number: num, StreetExtra: extra, Code: cbc.Code(code), Locality: locality, Country: "PT"}
+	}
+	tests := []struct {
+		name string
+		raw  string
+		want *org.Address
+	}{
+		{"number marker", "RUA CASTILHO N 65 3 DTO\nLISBOA\n1250-068 LISBOA", pt("RUA CASTILHO", "65", "3 DTO", "1250-068", "LISBOA")},
+		{"marker with commas", "RUA FORTE MONTE CINTRA, Nº 1, 2º C\nSACAVÉM\n2685-141 SACAVÉM", pt("RUA FORTE MONTE CINTRA", "1", "2º C", "2685-141", "SACAVÉM")},
+		{"marker with a dot", "RUA 1º. DE MAIO Nº. 90\nFREIXO DE BAIXO AMT\n4600-614 FREIXO DE BAIXO", pt("RUA 1º. DE MAIO", "90", "", "4600-614", "FREIXO DE BAIXO")},
+		{"marker in full", "RUA MARIANO CARVALHO NUMERO 230 5 A\nARCOZELO\n4410-483 ARCOZELO VNG", pt("RUA MARIANO CARVALHO", "230", "5 A", "4410-483", "ARCOZELO VNG")},
+		{"letter after the number", "RUA LOMBO DA BOAVISTA N 10 A\nFUNCHAL\n9060-173 FUNCHAL", pt("RUA LOMBO DA BOAVISTA", "10 A", "", "9060-173", "FUNCHAL")},
+		{"dash after the number", "RUA IRMÃOS SIEMENS N 1 - 1 A\nAMADORA\n2720-093 AMADORA", pt("RUA IRMÃOS SIEMENS", "1", "1 A", "2720-093", "AMADORA")},
+		{"negative floor", "RUA CASTILHO N 65 -1 DTO\nLISBOA\n1250-068 LISBOA", pt("RUA CASTILHO", "65", "-1 DTO", "1250-068", "LISBOA")},
+		{"number in the street name", "R 25 DE ABRIL N 55\nSILVARES\n4835-400 GUIMARAES", pt("R 25 DE ABRIL", "55", "SILVARES", "4835-400", "GUIMARAES")},
+		{"road with a number", "ESTRADA NACIONAL 233 N 10 PANOIAS DE CIMA GUARDA\nPANOIAS DE CIMA\n6300-152 PANOIAS DE CIMA", pt("ESTRADA NACIONAL 233", "10", "PANOIAS DE CIMA GUARDA", "6300-152", "PANOIAS DE CIMA")},
+		{"place other than the post town", "R DA BELA VISTA N 60\nGUALTAR\n4710-084 BRAGA", pt("R DA BELA VISTA", "60", "GUALTAR", "4710-084", "BRAGA")},
+		{"letter and place", "RUA RIBEIRA JOÃO GOMES N 71 B\nSANTA LUZIA\n9050-563 FUNCHAL", pt("RUA RIBEIRA JOÃO GOMES", "71 B", "SANTA LUZIA", "9050-563", "FUNCHAL")},
+		{"place without accents", "AV HEROIS DO ULTRAMAR N 56\nEVORA\n7005-161 ÉVORA", pt("AV HEROIS DO ULTRAMAR", "56", "", "7005-161", "ÉVORA")},
+		{"place with hyphens", "ROT MARIO DIONISIO N 2\nLINDA-A-VELHA\n2799-557 LINDA A VELHA", pt("ROT MARIO DIONISIO", "2", "", "2799-557", "LINDA A VELHA")},
+		{"place with brackets", "R DR JOSE BRUNO TAVARES CARREIRO N 6 9 PISO\nPONTA DELGADA (AÇORES)\n9500-769 PONTA DELGADA", pt("R DR JOSE BRUNO TAVARES CARREIRO", "6", "9 PISO", "9500-769", "PONTA DELGADA")},
+		{"place with a leading space", "LARGO DR QUEIROS VAZ GUEDES N 3\n PONTE DA BARCA\n4980-618 PONTE DA BARCA", pt("LARGO DR QUEIROS VAZ GUEDES", "3", "", "4980-618", "PONTE DA BARCA")},
+		{"number without a marker", "AVENIDA DA INDIA 8\nALCÂNTARA\n1349-062 LISBOA", pt("AVENIDA DA INDIA 8", "", "ALCÂNTARA", "1349-062", "LISBOA")},
+		{"date in the street name", "AV 5 DE OUTUBRO\nFAFE\n4820-115 FAFE", pt("AV 5 DE OUTUBRO", "", "", "4820-115", "FAFE")},
+		{"road number", "ESTRADA NACIONAL N 8 KM 52 AMIAL\nTORRES VEDRAS\n2565-641 RAMALHAL", pt("ESTRADA NACIONAL N 8 KM 52 AMIAL", "", "TORRES VEDRAS", "2565-641", "RAMALHAL")},
+		{"lot number", "ZONA INDUSTRIAL DE VAGOS LOTE N 61\nVAGOS\n3840-385 VAGOS", pt("ZONA INDUSTRIAL DE VAGOS LOTE N 61", "", "", "3840-385", "VAGOS")},
+		{"lot number with a dot", "ZONA INDUSTRIAL DE VAGOS LT. N 61\nVAGOS\n3840-385 VAGOS", pt("ZONA INDUSTRIAL DE VAGOS LT. N 61", "", "", "3840-385", "VAGOS")},
+		{"road with a dot", "ESTRADA EN. N 8\nRAMALHAL\n2565-641 RAMALHAL", pt("ESTRADA EN. N 8", "", "", "2565-641", "RAMALHAL")},
+		{"no street type", "CAMPUS DE CAMPOLIDE\nLISBOA\n1099-085 LISBOA", pt("CAMPUS DE CAMPOLIDE", "", "", "1099-085", "LISBOA")},
+		{"no number", "RUA VALE DE CENTEIO S/N\nCERNACHE\n3040-807 CERNACHE", pt("RUA VALE DE CENTEIO S/N", "", "", "3040-807", "CERNACHE")},
+		{"cut inside a word", "EDIFICIO ATLANTIS AV D JOÃO II N 44C PISO 5 PARQUE DAS NAÇOE\nS\nLISBOA\n1990-095 LISBOA", pt("EDIFICIO ATLANTIS AV D JOÃO II N 44C PISO 5 PARQUE DAS NAÇOES", "", "", "1990-095", "LISBOA")},
+		{"cut before a space", "RUA JOAQUIM DIAS ROCHA 354 ZONA INDUSTRIAL DA MAIA 1 SECTOR \nX\nMAIA\n4470-211 MAIA", pt("RUA JOAQUIM DIAS ROCHA 354 ZONA INDUSTRIAL DA MAIA 1 SECTOR X", "", "", "4470-211", "MAIA")},
+		{"cut after a space", "TALAIDE PARK CENTRO EMPRESARIAL TALAIDE ESTRADA OCTAVIO PATO\n N 175 177 EDIFICIO A 4\nSÃO DOMINGOS DE RANA\n2785-723 SAO DOMINGOS DE RANA", pt("TALAIDE PARK CENTRO EMPRESARIAL TALAIDE ESTRADA OCTAVIO PATO N 175 177 EDIFICIO A 4", "", "", "2785-723", "SAO DOMINGOS DE RANA")},
+		{"cut and number marker", "ESTRADA COMANDANTE CAMACHO DE FREITAS N 529 PARKMADE ARMAZEM\n N 21 FRAÇÃO Q\nFUNCHAL\n9020-151 FUNCHAL", pt("ESTRADA COMANDANTE CAMACHO DE FREITAS", "529", "PARKMADE ARMAZEM N 21 FRAÇÃO Q", "9020-151", "FUNCHAL")},
+		{"cut with a leading space", " GARE MARITIMA DA MADEIRA - MOLHE DA PONTINHA - PORTO DO FUN\nCHAL\nFUNCHAL\n9004-518 FUNCHAL", pt("GARE MARITIMA DA MADEIRA - MOLHE DA PONTINHA - PORTO DO FUNCHAL", "", "", "9004-518", "FUNCHAL")},
+		{"PO box", "APARTADO 55\nMITRENA\n2910-738 SETUBAL", nil},
+		{"PO box after a place", "VALE DE MOURO CAIXA POSTAL N 521 A\nFARO\n8005-538 FARO", nil},
+		{"four lines without a cut", "RUA CASTILHO N 65\n3 DTO\nLISBOA\n1250-068 LISBOA", nil},
+		{"two lines", "RUA CASTILHO N 65\n1250-068 LISBOA", nil},
+		{"postcode without a hyphen", "RUA CASTILHO N 65\nLISBOA\n1250068 LISBOA", nil},
+		{"masked", "---", nil},
+		{"empty", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseAddress("PT", tt.raw))
+		})
+	}
+}
+
 func TestParseAddressWithoutParser(t *testing.T) {
 	assert.Nil(t, parseAddress("DE", "MUSTERSTR. 1\n10115 BERLIN"), "a member state without a parser gives no address")
 	assert.Nil(t, parseAddress("FR", "59 RUE LA FAYETTE\n75009 PARIS"), "France has no parser")
