@@ -9,7 +9,10 @@ import (
 
 // Address parsers by member state; each member state writes its own way.
 var addressParsers = map[l10n.TaxCountryCode]func(lines []string) *org.Address{
+	"BG": parseAddressBG,
 	"IT": parseAddressIT,
+	"NL": parseAddressNL,
+	"PL": parseAddressPL,
 }
 
 // Nil unless a parser recognises the whole text: a wrong address is worse than

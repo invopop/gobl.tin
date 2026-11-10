@@ -12,9 +12,11 @@ linters:
     goconst:
       ignore-tests: true
     misspell:
-      # French field names of the Annuaire des Entreprises API.
+      # French field names of the Annuaire des Entreprises API, and Dutch
+      # register text in VIES answers.
       ignore-rules:
         - individuel
+        - adres
   exclusions:
     generated: lax
     paths:
