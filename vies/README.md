@@ -28,6 +28,7 @@ VIES gives the address as one free text, written differently by each member stat
 | `IT` | Two lines: the street with its house number, then the postcode, the locality and the province code. `VIA DEL BOSCO DEGLI ARVALI 84 INT 7` / `00148 ROMA RM` | `street` "VIA DEL BOSCO DEGLI ARVALI", `num` "84", `street_extra` "INT 7", `code` "00148", `locality` "ROMA", `region` "RM" |
 | `NL` | Two lines: the street with its house number padded to five digits and an optional addition, then the postcode and the town. `ZEKERINGSTRAAT 00039 C` / `1014BV AMSTERDAM` | `street` "ZEKERINGSTRAAT", `num` "39 C", `code` "1014BV", `locality` "AMSTERDAM" |
 | `PL` | Two lines: the street with its number and an optional flat, then the postcode and the post town. A first line names the town or village when it differs from the post town. `NIEKANIN` / `SZMARAGDOWA 3 M5` / `78-100 KOŁOBRZEG` | `street` "SZMARAGDOWA", `num` "3", `street_extra` "M5, NIEKANIN", `code` "78-100", `locality` "KOŁOBRZEG" |
+| `PT` | Three lines: the street text, the place, then the postcode and the post town. `RUA CASTILHO N 65 3 DTO` / `LISBOA` / `1250-068 LISBOA` | `street` "RUA CASTILHO", `num` "65", `street_extra` "3 DTO", `code` "1250-068", `locality` "LISBOA" |
 
 The Italian street line must start with a street type, such as `VIA`, `PIAZZA` or `LOC.`, so that a line such as `C/O STUDIO ROSSI` is never written as a street.
 
@@ -42,6 +43,8 @@ The Dutch parser drops the padding zeros of the house number. A short addition (
 The Austrian house number keeps its slash parts, labelled or not (`18/1/10`, `2/Stiege B6/OG`), because Austrian addresses write them as one number. A digit in the street name (`IZ NÖ-Süd Str 3 Obj 16`), a line without a house number and a comma give no address.
 
 The Polish flat (`M` and a digit, as in `M5` or `M2.43`) stays with its label in `street_extra`. A village with a separate post town goes to `street_extra` and the post town to `locality`, as Polish post writes it. Without a post town, the first line is the `locality`. A foreign address, a village without a town, and a street name that hides the house number (`SUCHA 1 LOKAL 5`, `SUCHA 1 MAGAZYN`) give no address.
+
+The Portuguese parser reads the text as VIES gives it, before the spaces are normalised. VIES cuts a street text after 60 characters, also inside a word, and goes on in the next line; a cut between two words leaves the space at one end of a line, so the two lines are joined without a separator. The house number is read only after a marker (`N`, `Nº`, `NUMERO`) that follows a street type (`RUA`, `R`, `AV`, `PC`, `LG` and others), and the details after it go to `street_extra`. A marker after a lot, a building or a road is not a house number: `ZONA INDUSTRIAL DE VAGOS LOTE N 61`, `ESTRADA NACIONAL N 8`. Any other street text goes whole to `street`, because numbers in Portuguese street names (`AV 5 DE OUTUBRO`) make a bare number unclear. The place goes to `street_extra` when it is not the post town once accents, hyphens, brackets and a municipality suffix (`AMT`, `VNG`) are ignored. A PO box (`APARTADO`, `CAIXA POSTAL`) gives no address.
 
 A member state without a parser gives no address. To add one, collect real VIES answers for it first, then add its parser and a table of those answers as tests.
 

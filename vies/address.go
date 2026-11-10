@@ -15,6 +15,7 @@ var addressParsers = map[l10n.TaxCountryCode]func(raw string) *org.Address{
 	"IT": byLines(parseAddressIT),
 	"NL": byLines(parseAddressNL),
 	"PL": byLines(parseAddressPL),
+	"PT": parseAddressPT,
 }
 
 // Nil unless a parser recognises the whole text: a wrong address is worse than
