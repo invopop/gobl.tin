@@ -10,6 +10,7 @@ import (
 // Address parsers by member state; each member state writes its own way. A
 // parser gets the text as VIES gives it.
 var addressParsers = map[l10n.TaxCountryCode]func(raw string) *org.Address{
+	"AT": byLines(parseAddressAT),
 	"BG": byLines(parseAddressBG),
 	"IT": byLines(parseAddressIT),
 	"NL": byLines(parseAddressNL),

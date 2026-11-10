@@ -194,6 +194,43 @@ func TestParseAddressPL(t *testing.T) {
 	}
 }
 
+// Company addresses from VIES (2026-11-10), plus made-up lines.
+func TestParseAddressAT(t *testing.T) {
+	at := func(street, num, code, locality string) *org.Address {
+		return &org.Address{Street: street, Number: num, Code: cbc.Code(code), Locality: locality, Country: "AT"}
+	}
+	tests := []struct {
+		name string
+		raw  string
+		want *org.Address
+	}{
+		{"street and number", "Innsbrucker Straße 75\nAT-6130 Schwaz", at("Innsbrucker Straße", "75", "6130", "Schwaz")},
+		{"number with a letter", "Feldkirchenstraße 30b\nAT-8401 Kalsdorf b.Graz", at("Feldkirchenstraße", "30b", "8401", "Kalsdorf b.Graz")},
+		{"letter after a space", "Siezenheimer Straße 29 A\nAT-5020 Salzburg", at("Siezenheimer Straße", "29 A", "5020", "Salzburg")},
+		{"number range", "Achenseestr. 1-3\nAT-6200 Jenbach", at("Achenseestr.", "1-3", "6200", "Jenbach")},
+		{"number range with spaces", "Wienerbergstraße 15 - 19\nAT-1100 Wien", at("Wienerbergstraße", "15 - 19", "1100", "Wien")},
+		{"stair and door", "Argentinierstraße 18/1/10\nAT-1040 Wien", at("Argentinierstraße", "18/1/10", "1040", "Wien")},
+		{"floor", "Strubergasse 28/5.OG\nAT-5020 Salzburg", at("Strubergasse", "28/5.OG", "5020", "Salzburg")},
+		{"labelled stair and floor", "Neue Stiftingtalstraße 2/Stiege B6/OG\nAT-8010 Graz", at("Neue Stiftingtalstraße", "2/Stiege B6/OG", "8010", "Graz")},
+		{"village without streets", "Anzing 33\nAT-4113 St.Martin/Mühlkreis", at("Anzing", "33", "4113", "St.Martin/Mühlkreis")},
+		{"street with hyphens", "Dr.-Auner-Straße 19/5\nAT-8074 Raaba-Grambach", at("Dr.-Auner-Straße", "19/5", "8074", "Raaba-Grambach")},
+		{"number in the street name", "IZ NÖ-Süd Str 3 Obj 16\nAT-2355 Wiener Neudorf", nil},
+		{"no number", "EVN-Platz .\nAT-2344 Maria Enzersdorf", nil},
+		{"building letter only", "Concorde Business Park F\nAT-2320 Schwechat", nil},
+		{"comma after the number", "Wagramerstr 19,IZD Tower\nAT-1220 Wien", nil},
+		{"market stall", "Schwendermarkt Stand/18\nAT-1150 Wien", nil},
+		{"postcode without the country", "Innsbrucker Straße 75\n6130 Schwaz", nil},
+		{"three lines", "c/o Muster GmbH\nInnsbrucker Straße 75\nAT-6130 Schwaz", nil},
+		{"masked", "---", nil},
+		{"empty", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseAddress("AT", tt.raw))
+		})
+	}
+}
+
 func TestParseAddressWithoutParser(t *testing.T) {
 	assert.Nil(t, parseAddress("DE", "MUSTERSTR. 1\n10115 BERLIN"), "a member state without a parser gives no address")
 	assert.Nil(t, parseAddress("FR", "59 RUE LA FAYETTE\n75009 PARIS"), "France has no parser")
