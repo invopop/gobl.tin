@@ -180,6 +180,15 @@ func TestVerify(t *testing.T) {
 		}
 		assert.Equal(t, int32(0), calls.Load())
 	})
+
+	t.Run("Company asks for a SIREN of 9 digits, without a request", func(t *testing.T) {
+		v, calls, _ := setup(t, ok(danoneCompany))
+		for _, siren := range []string{"", "55203253", "55203253A", "552032534 OR 1"} {
+			_, err := v.Company(ctx, siren)
+			assert.ErrorIs(t, err, tin.ErrInput, siren)
+		}
+		assert.Equal(t, int32(0), calls.Load())
+	})
 }
 
 func TestVerifierRouting(t *testing.T) {

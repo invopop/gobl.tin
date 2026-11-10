@@ -140,9 +140,6 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if code == "" {
 		return nil, tin.ErrInput.WithMessage("no SIREN provided")
 	}
-	if !sirenCode.MatchString(code) {
-		return nil, tin.ErrInput.WithMessage("a SIREN has 9 digits")
-	}
 	c, err := v.Company(ctx, code)
 	if err != nil {
 		return nil, err
@@ -173,8 +170,11 @@ type Company struct {
 }
 
 // Company returns the company with the SIREN, or nil when the Annuaire des
-// Entreprises does not list it. The SIREN must have 9 digits.
+// Entreprises does not list it. A SIREN without 9 digits is an input error.
 func (v *Verifier) Company(ctx context.Context, siren string) (*Company, error) {
+	if !sirenCode.MatchString(siren) {
+		return nil, tin.ErrInput.WithMessage("a SIREN has 9 digits")
+	}
 	if v.initErr != nil {
 		return nil, v.initErr
 	}
