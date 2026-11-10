@@ -106,7 +106,8 @@ func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Ch
 	if check.CheckedAt.IsZero() {
 		check.CheckedAt = time.Now().UTC()
 	}
-	if ans.TaxID != nil {
+	// An identity has no tax ID, whatever the verifier echoes.
+	if ans.TaxID != nil && id.taxID != nil {
 		check.TaxID = normalizeTaxID(ans.TaxID)
 	}
 	return check

@@ -492,6 +492,16 @@ func TestVerifyIdentities(t *testing.T) {
 		assert.True(t, report.Valid())
 	})
 
+	t.Run("an identity check ignores a tax ID in the answer", func(t *testing.T) {
+		ids := siren()
+		ids.checks["552032534"].TaxID = &tax.Identity{Country: "FR", Code: "27552032534"}
+		report, err := New(ids).Verify(ctx, &org.Party{Identities: []*org.Identity{{Type: "SIREN", Code: "552032534"}}})
+		require.NoError(t, err)
+		require.Len(t, report.Checks, 1)
+		assert.Nil(t, report.Checks[0].TaxID)
+		assert.Empty(t, report.Checks[0].Mismatches)
+	})
+
 	t.Run("a verifier that lists the type may still decline", func(t *testing.T) {
 		ids := siren()
 		ids.supports = func(id Identifier) bool { return id.Type == "SIREN" && id.Country == "" }
