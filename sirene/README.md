@@ -20,7 +20,7 @@ Sirene covers only identities, so its place in the list does not matter. A party
 2. **Record:** the legal name (for a sole trader, the person's name) and the structured address of the head office. A company closed in Sirene has the status `dissolved`. A person who opted out of publication in Sirene gets no name and no address. A head office abroad gives no address.
 3. **Failures:** any failure is an error, and the check is `unverified`. A `429` is a `RateLimitedError`. The Annuaire des Entreprises allows 7 calls a second per IP address.
 
-`sirene.Verifier.Company(ctx, siren)` returns the company for a SIREN, or nil when Sirene does not list it. The `dgfip` verifier uses it for the name and the address of a VAT number.
+`sirene.Verifier.Company(ctx, siren)` returns the company for a SIREN, or nil when Sirene does not list it.
 
 Options: `sirene.WithTimeout(d)` (default 15 seconds) and `sirene.WithHTTPClient(c)`. `sirene.WithURL(url)` is for tests.
 

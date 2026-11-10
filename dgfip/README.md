@@ -10,10 +10,12 @@ c := tin.New(
 ```
 
 1. **Validity:** the DGFiP dataset [Numéros de TVA intracommunautaire français](https://data.economie.gouv.fr/explore/dataset/numeros-de-tva-intracommunautaires-francais/) holds every active French VAT number. A number in it is `valid`. The dataset is updated on working days only.
-2. **Not registered for VAT:** many active businesses have no VAT number, such as a micro-entrepreneur under the franchise en base. Their tax ID is the SIREN, which GOBL normalizes to the VAT form. For a number that the dataset does not hold, but whose key is the one computed from the SIREN, an active company with that SIREN in the Annuaire des Entreprises is `valid` with `Record.Status` `not-vat-registered`. Any other number is `invalid`, without a company query: GOBL skips the checksum of a key with letters, so a made-up key must not pass.
-3. **Record:** for a valid number, the [`sirene`](../sirene/README.md) package gives the Sirene record from the [Annuaire des Entreprises](https://annuaire-entreprises.data.gouv.fr/) API: the legal name (for a sole trader, the person's name) and the structured address of the head office. A company closed in Sirene has the status `inactive`. A person who opted out of publication in Sirene gets no record. A head office abroad gives no address.
-4. **Failures:** any failure, including of the Annuaire des Entreprises, is an error, and the check is `unverified`. A `429` is a `RateLimitedError`; the dataset allows 50,000 calls a day per IP address and the error waits until the quota resets. The Annuaire des Entreprises allows 7 calls a second.
+2. **Any other number is `invalid`.** The reason points to the `SIREN` identity. The dataset cannot tell a business without a VAT number from a number that does not exist. A business without a VAT number, such as a micro-entrepreneur under the franchise en base, often has its SIREN as tax ID, and GOBL normalizes it to the VAT form. The [`sirene`](../sirene/README.md) verifier checks the SIREN when the party gives it as an identity of type `SIREN`.
+3. **No record:** the dataset holds only the number and its dates. A valid check has no name and no address, so no name check and no patch follow. The `sirene` verifier gives the name and the address for a `SIREN` identity.
+4. **Failures:** any failure is an error, and the check is `unverified`. A `429` is a `RateLimitedError`; the dataset allows 50,000 calls a day per IP address and the error waits until the quota resets.
 
-Options: `dgfip.WithTimeout(d)` and `dgfip.WithHTTPClient(c)`. `dgfip.WithDatasetURL(url)` and `dgfip.WithCompaniesURL(url)` are for tests.
+Decision (2026-11-04): `dgfip` calls only the dataset. Reason: the Annuaire call only added the name and the address, and a customer who wants them sends the `SIREN` identity. Rejected: the fallback that asked the Annuaire des Entreprises about a number with the key computed from the SIREN, and gave `valid` with `Record.Status` `not-vat-registered`.
 
-The data is published under the Licence Ouverte 2.0. Source: DGFiP, Numéros de TVA intracommunautaire français; INSEE, Sirene, through the Annuaire des Entreprises.
+Options: `dgfip.WithTimeout(d)` and `dgfip.WithHTTPClient(c)`. `dgfip.WithDatasetURL(url)` is for tests.
+
+The data is published under the Licence Ouverte 2.0. Source: DGFiP, Numéros de TVA intracommunautaire français.

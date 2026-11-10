@@ -1,13 +1,11 @@
 // Package dgfip implements the verifier for French VAT numbers. The DGFiP,
 // the French tax administration, publishes every active French VAT number as
-// open data; the Annuaire des Entreprises gives the registered name and the
-// structured address of the company.
+// open data.
 package dgfip
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/http"
 	"net/url"
@@ -18,7 +16,6 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	tin "github.com/invopop/gobl.tin"
-	"github.com/invopop/gobl.tin/sirene"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/tax"
@@ -33,17 +30,13 @@ const Source cbc.Key = "dgfip"
 // and is updated on working days.
 const DefaultDatasetURL = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/numeros-de-tva-intracommunautaires-francais"
 
-// DefaultCompaniesURL is the API of the Annuaire des Entreprises, which gives
-// the Sirene name and address.
-const DefaultCompaniesURL = sirene.DefaultURL
-
 // DefaultTimeout bounds a single API call.
 const DefaultTimeout = 15 * time.Second
 
 // userAgent identifies this library to the services.
 const userAgent = "gobl.tin (+https://github.com/invopop/gobl.tin)"
 
-// defaultRetryAfter is used when a service rate limits without saying when
+// defaultRetryAfter is used when the dataset rate limits without saying when
 // to retry.
 const defaultRetryAfter = time.Minute
 
@@ -51,14 +44,16 @@ const defaultRetryAfter = time.Minute
 // and the SIREN. It also keeps user input out of the dataset query.
 var vatCode = regexp.MustCompile(`^[0-9A-Z]{2}\d{9}$`)
 
+// reasonNotInDataset points a business without a VAT number to the SIREN
+// identity, which the sirene verifier checks.
+const reasonNotInDataset = "tax ID is not on the DGFIP register; a business without a VAT number sends its SIREN as an identity of type SIREN"
+
 // Verifier is the DGFiP verifier. It implements tin.Verifier.
 type Verifier struct {
-	datasetURL   string
-	companiesURL string
-	timeout      time.Duration
-	http         *http.Client
-	dataset      *resty.Client
-	companies    *sirene.Verifier
+	datasetURL string
+	timeout    time.Duration
+	http       *http.Client
+	dataset    *resty.Client
 
 	// initErr records an invalid construction, such as an unparseable base
 	// URL. Verify returns it, so a misconfiguration surfaces on the first call.
@@ -73,14 +68,6 @@ type Option func(*Verifier)
 func WithDatasetURL(u string) Option {
 	return func(v *Verifier) {
 		v.datasetURL = u
-	}
-}
-
-// WithCompaniesURL points the company queries at a different endpoint. It
-// exists so that tests can run against a local server.
-func WithCompaniesURL(u string) Option {
-	return func(v *Verifier) {
-		v.companiesURL = u
 	}
 }
 
@@ -101,25 +88,21 @@ func WithHTTPClient(c *http.Client) Option {
 
 // New creates a DGFiP verifier.
 func New(opts ...Option) *Verifier {
-	v := &Verifier{
-		datasetURL:   DefaultDatasetURL,
-		companiesURL: DefaultCompaniesURL,
-		timeout:      DefaultTimeout,
-	}
+	v := &Verifier{datasetURL: DefaultDatasetURL, timeout: DefaultTimeout}
 	for _, opt := range opts {
 		opt(v)
 	}
-	for _, u := range []string{v.datasetURL, v.companiesURL} {
-		if err := checkBaseURL(u); err != nil {
-			v.initErr = err
-		}
-	}
-	v.dataset = v.client(v.datasetURL)
-	sopts := []sirene.Option{sirene.WithURL(v.companiesURL), sirene.WithTimeout(v.timeout)}
+	v.initErr = checkBaseURL(v.datasetURL)
+	var c *resty.Client
 	if v.http != nil {
-		sopts = append(sopts, sirene.WithHTTPClient(v.http))
+		// A copy, so that setting the timeout leaves the caller's client
+		// as it was.
+		hc := *v.http
+		c = resty.NewWithClient(&hc)
+	} else {
+		c = resty.New()
 	}
-	v.companies = sirene.New(sopts...)
+	v.dataset = c.SetBaseURL(v.datasetURL).SetTimeout(v.timeout).SetHeader("User-Agent", userAgent)
 	return v
 }
 
@@ -136,19 +119,6 @@ func checkBaseURL(raw string) error {
 	return nil
 }
 
-func (v *Verifier) client(base string) *resty.Client {
-	var c *resty.Client
-	if v.http != nil {
-		// A copy, so that setting the timeout leaves the caller's client
-		// as it was.
-		hc := *v.http
-		c = resty.NewWithClient(&hc)
-	} else {
-		c = resty.New()
-	}
-	return c.SetBaseURL(base).SetTimeout(v.timeout).SetHeader("User-Agent", userAgent)
-}
-
 // Source names the DGFiP as the register.
 func (v *Verifier) Source() cbc.Key {
 	return Source
@@ -160,11 +130,8 @@ func (v *Verifier) Supports(id tin.Identifier) bool {
 }
 
 // Verify checks a French VAT number. A number in the dataset is valid, and
-// gets the name and the address of the company. For a number it does not
-// hold, but with the key computed from the SIREN, an active company with that
-// SIREN is valid with the status not-vat-registered, such as a business under
-// the franchise en base; otherwise the number is invalid. Any failure is an
-// error.
+// any other number is invalid: the dataset cannot tell a business without a
+// VAT number from a number that does not exist. Any failure is an error.
 func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, error) {
 	if v.initErr != nil {
 		return nil, v.initErr
@@ -180,35 +147,12 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if err != nil {
 		return nil, err
 	}
-	siren := code.String()[2:]
-	if !found && code.String()[:2] != sirenKey(siren) {
-		return &tin.Answer{Status: tin.StatusInvalid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}, nil
-	}
-	c, err := v.companies.Company(ctx, siren)
-	if err != nil {
-		return nil, err
-	}
 	ans := &tin.Answer{Status: tin.StatusValid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}
-	switch {
-	case found:
-		ans.Record = record(c)
-	case c != nil && c.Active:
-		ans.Record = record(c)
-		if ans.Record == nil {
-			ans.Record = new(tin.Record)
-		}
-		ans.Record.Status = tin.RecordStatusNotVATRegistered
-	default:
+	if !found {
 		ans.Status = tin.StatusInvalid
+		ans.Reason = reasonNotInDataset
 	}
 	return ans, nil
-}
-
-// sirenKey is the numeric key that GOBL gives a bare SIREN. GOBL skips the
-// checksum of a key with letters.
-func sirenKey(siren string) string {
-	n, _ := strconv.Atoi(siren)
-	return fmt.Sprintf("%02d", (n*100+12)%97)
 }
 
 func taxID(code cbc.Code) *tax.Identity {
@@ -234,7 +178,7 @@ func (v *Verifier) inDataset(ctx context.Context, code cbc.Code) (bool, error) {
 		return false, tin.ErrNetwork.WithCause(err)
 	}
 	if !resp.IsSuccess() {
-		return false, statusError(resp, "dataset")
+		return false, statusError(resp)
 	}
 	out := new(datasetResponse)
 	if err := json.Unmarshal(resp.Body(), out); err != nil || out.TotalCount == nil {
@@ -243,31 +187,15 @@ func (v *Verifier) inDataset(ctx context.Context, code cbc.Code) (bool, error) {
 	return *out.TotalCount > 0, nil
 }
 
-// record maps the company onto a record, or nil for no company or nothing
-// disclosed. A company closed in Sirene is inactive.
-func record(c *sirene.Company) *tin.Record {
-	if c == nil {
-		return nil
-	}
-	rec := &tin.Record{Name: c.Name, Address: c.Address}
-	if !c.Active {
-		rec.Status = tin.RecordStatusInactive
-	}
-	if rec.Name == "" && rec.Address == nil && rec.Status == "" {
-		return nil
-	}
-	return rec
-}
-
 // statusError maps a non-2xx response onto the tin error taxonomy. The
-// services take no input from the party but the number, which is checked
-// first, so a 4xx other than 429 is the service failing.
-func statusError(resp *resty.Response, what string) error {
+// dataset takes no input from the party but the number, which is checked
+// first, so a 4xx other than 429 is the dataset failing.
+func statusError(resp *resty.Response) error {
 	status := strconv.Itoa(resp.StatusCode())
 	if resp.StatusCode() == http.StatusTooManyRequests {
-		return &tin.RateLimitedError{RetryAfter: retryAfter(resp.Header()), Reason: what}
+		return &tin.RateLimitedError{RetryAfter: retryAfter(resp.Header()), Reason: "dataset"}
 	}
-	return tin.ErrServer.WithCode(status).WithMessage(what + ": " + clamp(string(resp.Body())))
+	return tin.ErrServer.WithCode(status).WithMessage("dataset: " + clamp(string(resp.Body())))
 }
 
 // retryAfter works out how long to wait before retrying: the standard
