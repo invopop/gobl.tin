@@ -16,10 +16,13 @@ var (
 	atPostcodeLine = regexp.MustCompile(`^AT-([1-9]\d{3}) (.+)$`)
 )
 
+// A PO box has no street.
+const atPOBox = "POSTFACH "
+
 // The slash parts stay in Number, as Austrian addresses write them. A digit in
 // the street name, as in "IZ NÖ-Süd Str 3 Obj 16", hides the house number.
 func parseAddressAT(lines []string) *org.Address {
-	if len(lines) != 2 || strings.Contains(lines[0], ",") {
+	if len(lines) != 2 || strings.Contains(lines[0], ",") || strings.HasPrefix(strings.ToUpper(lines[0]), atPOBox) {
 		return nil
 	}
 	s := atStreetLine.FindStringSubmatch(lines[0])

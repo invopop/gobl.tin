@@ -40,7 +40,7 @@ The Bulgarian text stays in Cyrillic. The labelled details stay in `street_extra
 
 The Dutch parser drops the padding zeros of the house number. A short addition (`C`, `A-1`, `14`) stays with the number; longer details, such as `UNIT C.2.17`, go to `street_extra`. A shielded address (`ADRES AFGESCHERMD`), a PO box (`POSTBUS`), a foreign address and house number `00000` give no address. The postcode stays as the register writes it, without a space.
 
-The Austrian house number keeps its slash parts, labelled or not (`18/1/10`, `2/Stiege B6/OG`), because Austrian addresses write them as one number. A digit in the street name (`IZ NÖ-Süd Str 3 Obj 16`), a line without a house number and a comma give no address.
+The Austrian house number keeps its slash parts, labelled or not (`18/1/10`, `2/Stiege B6/OG`), because Austrian addresses write them as one number. A digit in the street name (`IZ NÖ-Süd Str 3 Obj 16`), a line without a house number, a comma and a PO box (`Postfach`) give no address.
 
 The Polish flat (`M` and a digit, as in `M5` or `M2.43`) stays with its label in `street_extra`. A village with a separate post town goes to `street_extra` and the post town to `locality`, as Polish post writes it. Without a post town, the first line is the `locality`. A foreign address, a village without a town, and a street name that hides the house number (`SUCHA 1 LOKAL 5`, `SUCHA 1 MAGAZYN`) give no address.
 

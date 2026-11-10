@@ -218,6 +218,7 @@ func TestParseAddressAT(t *testing.T) {
 		{"no number", "EVN-Platz .\nAT-2344 Maria Enzersdorf", nil},
 		{"building letter only", "Concorde Business Park F\nAT-2320 Schwechat", nil},
 		{"comma after the number", "Wagramerstr 19,IZD Tower\nAT-1220 Wien", nil},
+		{"PO box", "Postfach 123\nAT-1010 Wien", nil},
 		{"market stall", "Schwendermarkt Stand/18\nAT-1150 Wien", nil},
 		{"postcode without the country", "Innsbrucker Straße 75\n6130 Schwaz", nil},
 		{"three lines", "c/o Muster GmbH\nInnsbrucker Straße 75\nAT-6130 Schwaz", nil},
