@@ -15,7 +15,8 @@ type register interface {
 
 // Registers in routing order: national registers before VIES.
 func defaultRegisters() []register {
-	return []register{new(aeatRegister), new(dgfipRegister), new(viesRegister)}
+	uk := new(hmrcRegister)
+	return []register{new(aeatRegister), uk, new(dgfipRegister), &viesRegister{northernIreland: uk}}
 }
 
 func buildVerifiers(registers []register) ([]tin.Verifier, error) {

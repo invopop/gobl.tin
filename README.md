@@ -25,6 +25,7 @@ Each register has its own package and README:
 | [`vies`](vies/README.md) | VIES, the European Commission | EU VAT numbers |
 | [`aeat`](aeat/README.md) | AEAT census, Spain | Spanish NIFs |
 | [`dgfip`](dgfip/README.md) | DGFiP open data and Sirene, France | French VAT numbers |
+| [`hmrc`](hmrc/README.md) | HMRC VAT register, UK | UK VAT numbers |
 
 ## Go package
 

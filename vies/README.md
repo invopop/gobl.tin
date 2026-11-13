@@ -42,6 +42,10 @@ The Polish flat (`M` and a digit, as in `M5` or `M2.43`) stays with its label in
 
 A member state without a parser gives no address. To add one, collect real VIES answers for it first, then add its parser and a table of those answers as tests.
 
+## Northern Ireland
+
+VIES gives an `XI` address as one line in which the street and the town run together, so it has no parser. An XI number is a UK VAT registration, so `vies.WithNorthernIrelandRecords(v)` takes the record of a valid XI number from `v`, usually the `hmrc` verifier, asked for the GB number with the same digits. VIES still decides validity. When `v` fails or does not hold the number, the VIES record (the name) stays. The command line does this when HMRC credentials are given.
+
 ## Errors
 
 VIES reports some failures in the body of an HTTP 200 response, in `errorWrappers` or `userError`:
