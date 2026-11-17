@@ -140,7 +140,7 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	if code == "" {
 		return nil, tin.ErrInput.WithMessage("no SIREN provided")
 	}
-	c, err := v.Company(ctx, code)
+	c, err := v.company(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -157,9 +157,9 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 	return &tin.Answer{Status: tin.StatusValid, Record: rec, CheckedAt: time.Now().UTC()}, nil
 }
 
-// Company is what Sirene publishes about a company. Fields that Sirene does
+// company is what Sirene publishes about a company. Fields that Sirene does
 // not publish are empty, so a person who opted out has no name or address.
-type Company struct {
+type company struct {
 	Name string
 
 	// Structured head office address. Nil for a head office abroad.
@@ -169,9 +169,9 @@ type Company struct {
 	Active bool
 }
 
-// Company returns the company with the SIREN, or nil when the Annuaire des
+// company returns the company with the SIREN, or nil when the Annuaire des
 // Entreprises does not list it. A SIREN without 9 digits is an input error.
-func (v *Verifier) Company(ctx context.Context, siren string) (*Company, error) {
+func (v *Verifier) company(ctx context.Context, siren string) (*company, error) {
 	if !sirenCode.MatchString(siren) {
 		return nil, tin.ErrInput.WithMessage("a SIREN has 9 digits")
 	}
@@ -194,7 +194,7 @@ func (v *Verifier) Company(ctx context.Context, siren string) (*Company, error) 
 	}
 	for i := range *out.Results {
 		if r := &(*out.Results)[i]; r.SIREN == siren {
-			return &Company{Name: r.name(), Address: r.HeadOffice.address(), Active: r.AdminStatus == "A"}, nil
+			return &company{Name: r.name(), Address: r.HeadOffice.address(), Active: r.AdminStatus == "A"}, nil
 		}
 	}
 	return nil, nil
