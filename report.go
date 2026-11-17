@@ -82,7 +82,8 @@ const (
 
 // Check is the outcome for one identifier of a party.
 type Check struct {
-	// JSON Pointer of the identifier in the party: "/tax_id".
+	// JSON Pointer of the identifier in the party: "/tax_id" or
+	// "/identities/<index>".
 	Path string `json:"path,omitempty"`
 
 	// Normalized, as the register echoes it when it does. Nil for an
