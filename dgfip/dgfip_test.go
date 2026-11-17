@@ -82,8 +82,8 @@ func TestVerify(t *testing.T) {
 	})
 
 	t.Run("a number the dataset does not hold is invalid, also with the key of its SIREN", func(t *testing.T) {
-		// 42 is the key that GOBL computes from the SIREN 904320728.
-		for _, code := range []cbc.Code{danone, "42904320728", "ZZ552032534"} {
+		// 27 is the key that GOBL computes from the SIREN of Danone.
+		for _, code := range []cbc.Code{danone, "ZZ552032534"} {
 			v, calls, _ := setup(t, ok(notInDataset))
 			ans, err := v.Verify(context.Background(), request(code))
 			require.NoError(t, err)

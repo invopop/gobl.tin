@@ -89,22 +89,22 @@ func TestVerify(t *testing.T) {
 	})
 
 	t.Run("a sole trader is named after the person", func(t *testing.T) {
-		body := `{"results":[{"siren":"390435220","nom_complet":"FRANCK DELHAYE (FRANCK DELHAYE)","nom_raison_sociale":null,"etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
-"siege":{"numero_voie":"2773","type_voie":"ROUTE","libelle_voie":"DE CORNUS","code_postal":"46330","libelle_commune":"CENEVIERES"}}]}`
+		body := `{"results":[{"siren":"123456789","nom_complet":"JEAN DUPONT (JEAN DUPONT)","nom_raison_sociale":null,"etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
+"siege":{"numero_voie":"10","type_voie":"RUE","libelle_voie":"DES LILAS","code_postal":"69001","libelle_commune":"LYON"}}]}`
 		v, _, _ := setup(t, ok(body))
-		ans, err := v.Verify(ctx, request("390435220"))
+		ans, err := v.Verify(ctx, request("123456789"))
 		require.NoError(t, err)
 		assert.Equal(t, &tin.Record{
-			Name:    "FRANCK DELHAYE",
-			Address: &org.Address{Number: "2773", Street: "ROUTE DE CORNUS", Code: "46330", Locality: "CENEVIERES", Country: "FR"},
+			Name:    "JEAN DUPONT",
+			Address: &org.Address{Number: "10", Street: "RUE DES LILAS", Code: "69001", Locality: "LYON", Country: "FR"},
 		}, ans.Record)
 	})
 
 	t.Run("a person who opted out of publication is valid without a record", func(t *testing.T) {
-		body := `{"results":[{"siren":"519341283","nom_complet":"[NON-DIFFUSIBLE]","nom_raison_sociale":"[NON-DIFFUSIBLE]","etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
+		body := `{"results":[{"siren":"987654321","nom_complet":"[NON-DIFFUSIBLE]","nom_raison_sociale":"[NON-DIFFUSIBLE]","etat_administratif":"A","complements":{"est_entrepreneur_individuel":true},
 "siege":{"numero_voie":"[NON-DIFFUSIBLE]","type_voie":"[NON-DIFFUSIBLE]","libelle_voie":"[NON-DIFFUSIBLE]","code_postal":"[NON-DIFFUSIBLE]","libelle_commune":"NIMES"}}]}`
 		v, _, _ := setup(t, ok(body))
-		ans, err := v.Verify(ctx, request("519341283"))
+		ans, err := v.Verify(ctx, request("987654321"))
 		require.NoError(t, err)
 		assert.Equal(t, tin.StatusValid, ans.Status)
 		assert.Nil(t, ans.Record)

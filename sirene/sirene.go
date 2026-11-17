@@ -233,7 +233,7 @@ type establishment struct {
 
 // name is the legal name of a company. A sole trader has none, so the name
 // of the person is the full name up to the brackets, which hold a usage or
-// trade name: "FRANCK DELHAYE (FRANCK DELHAYE)" gives "FRANCK DELHAYE".
+// trade name: "JEAN DUPONT (JEAN DUPONT)" gives "JEAN DUPONT".
 func (r *result) name() string {
 	if r.Complements.SoleTrader || r.LegalName == "" {
 		name, _, _ := strings.Cut(r.FullName, " (")
