@@ -108,7 +108,7 @@ func (c *Client) check(ctx context.Context, id identifier, party *org.Party) *Ch
 	}
 	// An identity has no tax ID, whatever the verifier echoes.
 	if ans.TaxID != nil && id.taxID != nil {
-		check.TaxID = normalizeTaxID(ans.TaxID)
+		check.TaxID = NormalizeTaxID(ans.TaxID)
 	}
 	return check
 }

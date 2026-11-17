@@ -127,7 +127,7 @@ func sameTaxID(a, b *tax.Identity) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	na, nb := normalizeTaxID(a), normalizeTaxID(b)
+	na, nb := NormalizeTaxID(a), NormalizeTaxID(b)
 	return na.Country == nb.Country && na.Code == nb.Code
 }
 

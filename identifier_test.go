@@ -65,3 +65,22 @@ func TestWalk(t *testing.T) {
 		assert.NotSame(t, party.TaxID, ids[0].taxID)
 	})
 }
+
+func TestNormalize(t *testing.T) {
+	t.Run("a tax ID as the client checks it", func(t *testing.T) {
+		tid := &tax.Identity{Country: " fr", Code: "FR 27-552.032.534"}
+		assert.Equal(t, &tax.Identity{Country: "FR", Code: "27552032534"}, NormalizeTaxID(tid))
+		assert.Equal(t, "FR 27-552.032.534", tid.Code.String(), "the original stays as it was")
+	})
+
+	t.Run("an identity as the client checks it", func(t *testing.T) {
+		ident := &org.Identity{Type: " siren", Country: "fr", Code: "552 032 534"}
+		assert.Equal(t, &org.Identity{Type: "SIREN", Country: "FR", Code: "552032534"}, NormalizeIdentity(ident))
+		assert.Equal(t, "552 032 534", ident.Code.String(), "the original stays as it was")
+	})
+
+	t.Run("nil is nil", func(t *testing.T) {
+		assert.Nil(t, NormalizeTaxID(nil))
+		assert.Nil(t, NormalizeIdentity(nil))
+	})
+}

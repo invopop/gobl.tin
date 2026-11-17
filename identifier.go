@@ -43,7 +43,7 @@ func walk(party *org.Party) []identifier {
 
 // fromIdentity copies and normalizes the identity at the index.
 func fromIdentity(i int, ident *org.Identity) identifier {
-	cp := normalizeIdentity(ident)
+	cp := NormalizeIdentity(ident)
 	return identifier{
 		Identifier: Identifier{
 			Path:    IdentityPath(i),
@@ -55,9 +55,12 @@ func fromIdentity(i int, ident *org.Identity) identifier {
 	}
 }
 
-// normalizeIdentity returns a copy of the identity with the type and the
-// country upper cased, and the code stripped of separators.
-func normalizeIdentity(ident *org.Identity) *org.Identity {
+// NormalizeIdentity returns a copy of the identity as the client checks it:
+// the type and the country upper cased, and the code stripped of separators.
+func NormalizeIdentity(ident *org.Identity) *org.Identity {
+	if ident == nil {
+		return nil
+	}
 	cp := *ident
 	cp.Type = cbc.Code(strings.ToUpper(strings.TrimSpace(cp.Type.String())))
 	cp.Country = l10n.ISOCountryCode(strings.ToUpper(strings.TrimSpace(cp.Country.String())))
@@ -75,7 +78,7 @@ func sameIdentity(ident *org.Identity, party *org.Party) bool {
 		if p == nil {
 			continue
 		}
-		if cp := normalizeIdentity(p); cp.Type == ident.Type && cp.Code == ident.Code {
+		if cp := NormalizeIdentity(p); cp.Type == ident.Type && cp.Code == ident.Code {
 			return true
 		}
 	}
@@ -84,7 +87,7 @@ func sameIdentity(ident *org.Identity, party *org.Party) bool {
 
 // fromTaxID copies and normalizes a tax identity into an identifier.
 func fromTaxID(tid *tax.Identity) identifier {
-	cp := normalizeTaxID(tid)
+	cp := NormalizeTaxID(tid)
 	return identifier{
 		Identifier: Identifier{
 			Path:    PathTaxID,
@@ -95,10 +98,13 @@ func fromTaxID(tid *tax.Identity) identifier {
 	}
 }
 
-// normalizeTaxID returns a copy of the tax identity with the country and
-// the code upper cased, and the code stripped of separators and of a
-// leading country prefix.
-func normalizeTaxID(tid *tax.Identity) *tax.Identity {
+// NormalizeTaxID returns a copy of the tax identity as the client checks it:
+// the country and the code upper cased, and the code stripped of separators
+// and of a leading country prefix.
+func NormalizeTaxID(tid *tax.Identity) *tax.Identity {
+	if tid == nil {
+		return nil
+	}
 	cp := *tid
 	cp.Country = l10n.TaxCountryCode(strings.ToUpper(strings.TrimSpace(cp.Country.String())))
 	tax.NormalizeIdentity(&cp)

@@ -36,7 +36,7 @@ func taxIDMismatch(id identifier, check *Check) *Mismatch {
 	if check.TaxID == nil || check.TaxID == id.taxID {
 		return nil
 	}
-	echo := normalizeTaxID(check.TaxID)
+	echo := NormalizeTaxID(check.TaxID)
 	switch {
 	case echo.Country != id.taxID.Country:
 		return &Mismatch{

@@ -97,7 +97,7 @@ type Verifier interface {
 }
 ```
 
-`Identifier` describes the identifier: its path in the party, its type, its country and its normalized code. The type is empty for a tax ID and holds the identity type, such as `SIREN`, for an entry of `identities`. `Supports` routes on it alone. `Request` is what `Verify` receives: the `Identifier` and the `Party` it belongs to, as read-only context for registers that need more than the code, such as a name. `Party` is nil for `VerifyTaxID`; a verifier that needs it returns `ErrInput`. Consumers never construct either; the client builds them from GOBL types.
+`Identifier` describes the identifier: its path in the party, its type, its country and its normalized code. The type is empty for a tax ID and holds the identity type, such as `SIREN`, for an entry of `identities`. `Supports` routes on it alone. `Request` is what `Verify` receives: the `Identifier` and the `Party` it belongs to, as read-only context for registers that need more than the code, such as a name. `Party` is nil for `VerifyTaxID`; a verifier that needs it returns `ErrInput`. Consumers never construct either; the client builds them from GOBL types. `NormalizeTaxID` and `NormalizeIdentity` return a copy of a tax ID or an identity as the client checks it, for a caller that compares identifiers before `Verify`.
 
 A verifier that covers entries of `identities` also implements `tin.IdentityVerifier`. `IdentityTypes()` lists the identity types it covers, for example `SIREN`. The client offers an identity only to such a verifier, and only when it lists the identity's type, so a verifier that knows only tax IDs never sees an identity. A party may hold identities that no verifier covers; they get no check.
 
