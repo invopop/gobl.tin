@@ -46,7 +46,7 @@ var vatCode = regexp.MustCompile(`^[0-9A-Z]{2}\d{9}$`)
 
 // reasonNotInDataset points a business without a VAT number to the SIREN
 // identity, which the sirene verifier checks.
-const reasonNotInDataset = "tax ID is not on the DGFIP register; a business without a VAT number sends its SIREN as an identity of type SIREN"
+const reasonNotInDataset = "tax ID is not on the DGFIP register; a business without a VAT number leaves the tax ID empty and sends its SIREN as an identity of type SIREN"
 
 // Verifier is the DGFiP verifier. It implements tin.Verifier.
 type Verifier struct {
