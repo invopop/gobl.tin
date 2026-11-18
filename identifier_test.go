@@ -26,16 +26,26 @@ func TestWalk(t *testing.T) {
 		assert.Empty(t, walk(&org.Party{TaxID: &tax.Identity{Country: "DE", Code: "DE"}}))
 	})
 
-	t.Run("identities are not walked", func(t *testing.T) {
+	t.Run("identities with a type and a code follow the tax id", func(t *testing.T) {
 		party := &org.Party{
-			TaxID:      &tax.Identity{Country: "DE", Code: "282741168"},
-			Identities: []*org.Identity{{Country: "DE", Type: "HRB", Code: "12345"}},
+			TaxID: &tax.Identity{Country: "DE", Code: "282741168"},
+			Identities: []*org.Identity{
+				{Country: "DE", Type: "HRB", Code: "12345"},
+				nil,
+				{Code: "no type"},
+				{Type: "SIREN"},
+				{Type: " siren ", Code: "552 032 534"},
+			},
 		}
 		ids := walk(party)
-		require.Len(t, ids, 1)
+		require.Len(t, ids, 3)
 		assert.Equal(t, "/tax_id", ids[0].Path)
 		assert.Equal(t, "DE", ids[0].Country.String())
 		assert.Equal(t, "282741168", ids[0].Code.String())
+		assert.Equal(t, Identifier{Path: "/identities/0", Type: "HRB", Country: "DE", Code: "12345"}, ids[1].Identifier)
+		assert.Equal(t, Identifier{Path: "/identities/4", Type: "SIREN", Code: "552032534"}, ids[2].Identifier)
+		assert.Nil(t, ids[2].taxID)
+		assert.Equal(t, "552 032 534", party.Identities[4].Code.String(), "the party is untouched")
 	})
 
 	t.Run("upper-cases a lower-case country", func(t *testing.T) {
@@ -53,5 +63,24 @@ func TestWalk(t *testing.T) {
 		assert.Equal(t, "282741168", ids[0].taxID.Code.String())
 		assert.Equal(t, " de 282-741.168 ", party.TaxID.Code.String())
 		assert.NotSame(t, party.TaxID, ids[0].taxID)
+	})
+}
+
+func TestNormalize(t *testing.T) {
+	t.Run("a tax ID as the client checks it", func(t *testing.T) {
+		tid := &tax.Identity{Country: " fr", Code: "FR 27-552.032.534"}
+		assert.Equal(t, &tax.Identity{Country: "FR", Code: "27552032534"}, NormalizeTaxID(tid))
+		assert.Equal(t, "FR 27-552.032.534", tid.Code.String(), "the original stays as it was")
+	})
+
+	t.Run("an identity as the client checks it", func(t *testing.T) {
+		ident := &org.Identity{Type: " siren", Country: "fr", Code: "552 032 534"}
+		assert.Equal(t, &org.Identity{Type: "SIREN", Country: "FR", Code: "552032534"}, NormalizeIdentity(ident))
+		assert.Equal(t, "552 032 534", ident.Code.String(), "the original stays as it was")
+	})
+
+	t.Run("nil is nil", func(t *testing.T) {
+		assert.Nil(t, NormalizeTaxID(nil))
+		assert.Nil(t, NormalizeIdentity(nil))
 	})
 }

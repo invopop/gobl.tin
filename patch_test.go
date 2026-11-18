@@ -241,3 +241,32 @@ func TestPatchSkipsAReportForAnotherParty(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"name":"ACME GMBH"}`, string(patch), "the same tax ID in another spelling still matches")
 }
+
+// TestPatchFromAnIdentity checks a valid identity check writes its record
+// when the party holds that identity, and nothing otherwise.
+func TestPatchFromAnIdentity(t *testing.T) {
+	office := &org.Address{Street: "RUE LA FAYETTE", Number: "59", Code: "75009", Locality: "PARIS", Country: "FR"}
+	report := &Report{Checks: []*Check{{
+		Path: "/identities/0", Status: StatusValid, Source: "sirene",
+		Identity: &org.Identity{Type: "SIREN", Code: "552032534"},
+		Record:   &Record{Name: "DANONE", Address: office},
+	}}}
+
+	party := &org.Party{Name: "Danone SA", Identities: []*org.Identity{{Type: "SIREN", Code: "552 032 534"}}}
+	patch, err := Patch(party, report)
+	require.NoError(t, err)
+	got := applyPatch(t, party, patch)
+	assert.Equal(t, "DANONE", got.Name)
+	assert.Equal(t, []*org.Address{office}, got.Addresses)
+
+	for name, other := range map[string]*org.Party{
+		"another SIREN":   {Name: "Other", Identities: []*org.Identity{{Type: "SIREN", Code: "111111111"}}},
+		"another type":    {Name: "Other", Identities: []*org.Identity{{Type: "SIRET", Code: "552032534"}}},
+		"no identities":   {Name: "Other"},
+		"only the tax ID": {Name: "Other", TaxID: &tax.Identity{Country: "FR", Code: "27552032534"}},
+	} {
+		patch, err := Patch(other, report)
+		require.NoError(t, err, name)
+		assert.JSONEq(t, `{}`, string(patch), name)
+	}
+}

@@ -13,9 +13,10 @@ type register interface {
 	verifier() (tin.Verifier, error)
 }
 
-// Registers in routing order: national registers before VIES.
+// Registers in routing order: national registers before VIES. Sirene covers
+// only identities, so its place does not matter.
 func defaultRegisters() []register {
-	return []register{new(aeatRegister), new(dgfipRegister), new(viesRegister)}
+	return []register{new(aeatRegister), new(dgfipRegister), new(viesRegister), new(sireneRegister)}
 }
 
 func buildVerifiers(registers []register) ([]tin.Verifier, error) {
