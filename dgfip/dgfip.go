@@ -137,22 +137,37 @@ func (v *Verifier) Verify(ctx context.Context, req tin.Request) (*tin.Answer, er
 		return nil, v.initErr
 	}
 	code := req.Identifier.Code
-	if code == "" {
-		return nil, tin.ErrInput.WithMessage("no tax ID code provided")
-	}
-	if !vatCode.MatchString(code.String()) {
-		return nil, tin.ErrInput.WithMessage("a French VAT number has a key of 2 characters and a SIREN of 9 digits")
+	if err := CheckCode(code); err != nil {
+		return nil, err
 	}
 	found, err := v.inDataset(ctx, code)
 	if err != nil {
 		return nil, err
 	}
-	ans := &tin.Answer{Status: tin.StatusValid, TaxID: taxID(code), CheckedAt: time.Now().UTC()}
+	return NewAnswer(code, found, time.Now().UTC()), nil
+}
+
+// CheckCode returns an input error when the code is not a French VAT number
+// without the country.
+func CheckCode(code cbc.Code) error {
+	if code == "" {
+		return tin.ErrInput.WithMessage("no tax ID code provided")
+	}
+	if !vatCode.MatchString(code.String()) {
+		return tin.ErrInput.WithMessage("a French VAT number has a key of 2 characters and a SIREN of 9 digits")
+	}
+	return nil
+}
+
+// NewAnswer builds the answer for a checked code. The found flag tells if the
+// dataset holds the code.
+func NewAnswer(code cbc.Code, found bool, checkedAt time.Time) *tin.Answer {
+	ans := &tin.Answer{Status: tin.StatusValid, TaxID: taxID(code), CheckedAt: checkedAt}
 	if !found {
 		ans.Status = tin.StatusInvalid
 		ans.Reason = reasonNotInDataset
 	}
-	return ans, nil
+	return ans
 }
 
 func taxID(code cbc.Code) *tax.Identity {

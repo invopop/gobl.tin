@@ -16,6 +16,8 @@ c := tin.New(
 
 Decision (2026-11-04): `dgfip` calls only the dataset. Reason: the Annuaire call only added the name and the address, and a customer who wants them sends the `SIREN` identity. Rejected: the fallback that asked the Annuaire des Entreprises about a number with the key computed from the SIREN, and gave `valid` with `Record.Status` `not-vat-registered`.
 
+A caller that keeps its own copy of the dataset can call `dgfip.CheckCode` before its lookup and `dgfip.NewAnswer` after it. The answers and the input errors are then the same as the answers and input errors of `Verify`.
+
 Options: `dgfip.WithTimeout(d)` and `dgfip.WithHTTPClient(c)`. `dgfip.WithDatasetURL(url)` is for tests.
 
 The data is published under the Licence Ouverte 2.0. Source: DGFiP, Numéros de TVA intracommunautaire français.

@@ -11,6 +11,7 @@ import (
 	tin "github.com/invopop/gobl.tin"
 	"github.com/invopop/gobl.tin/vies"
 	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/l10n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -165,3 +166,51 @@ func TestClientNeverAsksVIES(t *testing.T) {
 }
 
 var taxIdentity = *taxID(danone)
+
+func TestCheckCode(t *testing.T) {
+	tests := []struct {
+		name string
+		code cbc.Code
+		msg  string
+	}{
+		{"empty", "", "no tax ID code provided"},
+		{"bad format", "123", "a French VAT number has a key of 2 characters and a SIREN of 9 digits"},
+		{"letter key", "0A036380046", ""},
+		{"valid", "27552032534", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckCode(tt.code)
+			if tt.msg == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tin.ErrInput)
+			assert.Contains(t, err.Error(), tt.msg)
+		})
+	}
+}
+
+func TestNewAnswer(t *testing.T) {
+	at := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		found  bool
+		status tin.Status
+		reason string
+	}{
+		{"found", true, tin.StatusValid, ""},
+		{"not found", false, tin.StatusInvalid, reasonNotInDataset},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ans := NewAnswer("27552032534", tt.found, at)
+			assert.Equal(t, tt.status, ans.Status)
+			assert.Equal(t, l10n.FR.Tax(), ans.TaxID.Country)
+			assert.Equal(t, cbc.Code("27552032534"), ans.TaxID.Code)
+			assert.Equal(t, at, ans.CheckedAt)
+			assert.Equal(t, tt.reason, ans.Reason)
+		})
+	}
+}
